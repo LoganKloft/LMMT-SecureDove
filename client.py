@@ -5,7 +5,7 @@ from threading import Thread
 
 s = socket.socket()
 port = 8080
-s.connect(('x1c9', port))
+s.connect(('localhost', port))
 
 def connection_handler(s):
     while True:

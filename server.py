@@ -23,8 +23,9 @@ def connection_handler(conn, addr):
     conn.close()
 
 s = socket.socket()
-host = socket.gethostname()
+host = 'localhost'
 port = 8080
+print(f'Listening at {host}:{port}')
 s.bind((host, port))
 s.listen(1)
 
