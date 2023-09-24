@@ -13,7 +13,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import { useNavigate } from 'react-router-dom';
 import "./Hallway.scss";
 
-export default function Hallway() {
+export default function Hallway({ socket }) {
     const [rooms, setRooms] = useState([{ "roomid": "123456789", "roomname": "test" }])
     const [joinValue, setJoinValue] = useState(null);
     const [createValue, setCreateValue] = useState(null);

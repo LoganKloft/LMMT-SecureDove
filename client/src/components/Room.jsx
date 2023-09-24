@@ -7,7 +7,7 @@ import './Room.scss';
 // the socket is the vessel for communication
 export default function Room({ userid, username, roomid, socket }) {
 
-    const [messages, setMessages] = useState([{ "timestamp": "Logan @ 9/24/2023 11:25", "content": "Hello World!" }]);
+    const [messages, setMessages] = useState([{ "header": "Logan @ 9/24/2023 11:25", "message": "Hello World!" }]);
     const [users, setUsers] = useState(["Logan"]);
 
     return (
@@ -20,8 +20,8 @@ export default function Room({ userid, username, roomid, socket }) {
                         messages.map(message => {
                             return (
                                 <div className="message">
-                                    <p className="messageHeader">{message.timestamp}</p>
-                                    <p className="messageContent">{message.content}</p>
+                                    <p className="messageHeader">{message.header}</p>
+                                    <p className="messageContent">{message.message}</p>
                                 </div>
                             )
                         })
