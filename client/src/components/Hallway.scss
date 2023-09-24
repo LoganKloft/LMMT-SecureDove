@@ -3,4 +3,15 @@
 .Hallway {
     background-color: $primary;
     width: 5%;
+
+    button {
+        width: fit-content;
+        height: fit-content;
+    }
+
+    overflow-y: scroll;
+}
+
+.Hallway::-webkit-scrollbar {
+    display: none;
 }
