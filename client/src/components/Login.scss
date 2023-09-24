@@ -1,1 +1,83 @@
-.Login {}
+@use 'sass:math';
+@import '../_colors';
+
+
+$particleSize: 20vmin;
+$animationDuration: 6s;
+$amount: 20;
+
+.background span {
+    width: $particleSize;
+    height: $particleSize;
+    border-radius: $particleSize;
+    backface-visibility: hidden;
+    position: absolute;
+    animation-name: move;
+    animation-duration: $animationDuration;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    $colors: (
+        #583C87,
+        #E45A84,
+        #FFACAC
+    );
+
+@for $i from 1 through $amount {
+    &:nth-child(#{$i}) {
+        color: nth($colors, random(length($colors)));
+        top: random(100) * 1%;
+        left: random(100) * 1%;
+        animation-duration: calc((math.random(math.div($animationDuration, 1s) * 10)) / 10 * 1s + 10s);
+        animation-delay: calc(math.random(math.div($animationDuration + 10, 1s) * 10) / 10 * -1s);
+        transform-origin: (random(50) - 25) * 1vw (random(50) - 25) * 1vh;
+        $blurRadius: (
+            random() + 0.5) * $particleSize * 0.5;
+        $x: if(random() > 0.5, -1, 1
+        );
+    box-shadow: ($particleSize * 2 * $x) 0 $blurRadius currentColor;
+}
+}
+}
+
+@keyframes move {
+    100% {
+        transform: translate3d(0, 0, 1px) rotate(360deg);
+    }
+}
+
+.Login {
+    position: relative;
+    overflow: hidden;
+    height: 100%;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    .submit {
+        background-color: #1976D2;
+        color: white;
+        padding: 6px 16px;
+        font-family: Roboto, Helvetica, Arial, sans-serif;
+        font-size: 14px;
+        border-radius: 4px;
+        box-shadow: 0px 3px 1px -2px rgba(0, 0, 0, 0.2), 0px 2px 2px 0px rgba(0, 0, 0, 0.14), 0px 1px 5px 0px rgba(0, 0, 0, 0.12);
+        text-transform: uppercase;
+        font-weight: 500;
+        border: 0;
+        line-height: 1.75;
+        letter-spacing: .02857em;
+        z-index: 1;
+    }
+
+    .submit:hover {
+        cursor: pointer;
+        transition-duration: .1s;
+        background-image: linear-gradient(rgb(0 0 0/10%) 0 0);
+        box-shadow: 0px 3px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .submit:active {
+        box-shadow: 0px 3px 50px rgba(0, 0, 0, 0.2);
+    }
+}
