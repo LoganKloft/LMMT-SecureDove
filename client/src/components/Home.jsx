@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import Hallway from './Hallway';
 import Room from './Room';
 import "./Home.scss";
@@ -8,9 +8,6 @@ export default function Home({ websocketRef }) {
     const [messages, setMessages] = useState([])
     const [users, setUsers] = useState([])
 
-    const setCurrentRoomId = data => {
-        roomIDRef.current = data;
-    }
     const roomIDRef = useRef("");
 
     return (

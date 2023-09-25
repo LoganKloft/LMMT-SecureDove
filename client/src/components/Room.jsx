@@ -11,7 +11,6 @@ export default function Room({ messages, users, currentRoomId, websocketRef }) {
 
     function sendMessageHandler(e) {
         if (websocketRef.current && currentRoomId.current && e.code === "Enter") {
-            console.log("success");
             let request = {
                 "type": "message",
                 "verb": "post",
