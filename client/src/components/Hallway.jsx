@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Stack from '@mui/material/Stack';
 import IconButton from '@mui/material/IconButton';
 import AddIcon from '@mui/icons-material/Add';
@@ -13,11 +13,76 @@ import DialogTitle from '@mui/material/DialogTitle';
 import { useNavigate } from 'react-router-dom';
 import "./Hallway.scss";
 
-export default function Hallway({ socket }) {
-    const [rooms, setRooms] = useState([{ "roomid": "123456789", "roomname": "test" }])
+export default function Hallway({ setUsers, setMessages, websocketRef, setCurrentRoomId, currentRoomId }) {
+    const [rooms, setRooms] = useState([])
     const [joinValue, setJoinValue] = useState(null);
     const [createValue, setCreateValue] = useState(null);
     const [open, setOpen] = useState(false);
+
+    function handler(websocketRef) {
+        websocketRef.current.addEventListener("message", ({ data }) => {
+            const response = JSON.parse(data);
+
+            if (response["verb"] === "post") {
+                if (response["type"] === "room") {
+                    // add to rooms
+                    let room = {
+                        "roomid": response["content"]["roomid"],
+                        "roomname": response["content"]["roomname"]
+                    }
+                    setRooms(prev => [...prev, room]);
+                }
+            }
+
+            // since some of these handlers trigger
+            // ui changes, we only want them to occur when it
+            // makes sense. this depends on whether the 
+            // current room we're displaying matches the
+            // one a response refers to. The exceptions are
+            // responses that create a new room (which is above this statement)
+            if (currentRoomId !== response["content"]["roomid"]) {
+                return;
+            }
+
+            if (response["verb"] === "get") {
+                if (response["type"] === "room") {
+                    // update messages
+                    setMessages(response["content"]["messages"])
+
+                    // update users
+                    setUsers(response["content"]["profiles"])
+                }
+                else if (response["type"] === "message") {
+                    // add a new message
+                    let message = {
+                        "header": response["content"]["header"],
+                        "message": response["content"]["message"]
+                    }
+                    setMessages(prev => [...prev, message])
+                }
+            }
+            else if (response["verb"] === "put") {
+                if (response["type"] === "room") {
+                    // add to rooms
+                    let room = {
+                        "roomid": response["content"]["roomid"],
+                        "roomname": response["content"]["roomname"]
+                    }
+                    setRooms(prev => [...prev, room])
+                }
+            }
+            else if (response["verb"] === "delete") {
+                if (response["type"] === "room") {
+                    // re-display users b/c a user left
+                    setUsers(response["content"]["profiles"])
+                }
+            }
+        })
+    }
+
+    useEffect(() => {
+        handler(websocketRef)
+    }, [websocketRef])
 
     const navigate = useNavigate();
 
@@ -31,14 +96,57 @@ export default function Hallway({ socket }) {
 
     const handleCreate = () => {
         handleClose();
+
+        if (websocketRef.current) {
+            let request = {
+                "type": "room",
+                "verb": "post",
+                "content": { "roomname": createValue }
+            }
+
+            websocketRef.current.send(JSON.stringify(request));
+        }
+    }
+
+    const handleClickRoom = (event) => {
+        if (websocketRef.current) {
+            setCurrentRoomId(event.target.dataset.roomid);
+
+            // TODO: for some reason currentRoomID
+            // does not update for Hallway, but does for Room
+            currentRoomId = event.target.dataset.roomid;
+
+            let request = {
+                "type": "room",
+                "verb": "get",
+                "content": {
+                    "roomid": event.target.dataset.roomid
+                }
+            }
+
+            websocketRef.current.send(JSON.stringify(request));
+        }
     }
 
     const handleJoin = () => {
         handleClose();
+
+        if (websocketRef.current) {
+            let request = {
+                "type": "room",
+                "verb": "put",
+                "content": { "roomid": joinValue },
+            }
+
+            websocketRef.current.send(JSON.stringify(request));
+        }
     }
 
     const handleLogout = () => {
         // close websocket connection
+        if (websocketRef.current) {
+            websocketRef.current.close()
+        }
 
         // navigate to login page
         navigate('/');
@@ -47,6 +155,18 @@ export default function Hallway({ socket }) {
     return (
         <div className='Hallway'>
             <Stack direction="column" alignItems={"center"} paddingTop={1} paddingBottom={"10px"} spacing={1}>
+                {
+                    rooms &&
+                    rooms.map(room => {
+                        return (
+                            <IconButton
+                                key={room.roomid}
+                                onClick={handleClickRoom}>
+                                <p className="roomNameLabel" data-roomid={room.roomid}>{room.roomname[0]}</p>
+                            </IconButton>
+                        )
+                    })
+                }
                 <IconButton onClick={handleClickOpen}>
                     <AddIcon />
                 </IconButton>

@@ -10,6 +10,13 @@
     }
 
     overflow-y: scroll;
+
+    .roomNameLabel {
+        width: 25px;
+        height: 25px;
+        margin: 0px;
+        padding: 0px;
+    }
 }
 
 .Hallway::-webkit-scrollbar {

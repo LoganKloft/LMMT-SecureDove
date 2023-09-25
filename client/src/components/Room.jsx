@@ -5,10 +5,28 @@ import './Room.scss';
 // when we send a message, we provide the userid which says who is sending the message
 // we also need a destination to send the message to, this is the roomid
 // the socket is the vessel for communication
-export default function Room({ userid, username, roomid, socket }) {
+export default function Room({ messages, users, currentRoomId, websocketRef }) {
 
-    const [messages, setMessages] = useState([{ "header": "Logan @ 9/24/2023 11:25", "message": "Hello World!" }]);
-    const [users, setUsers] = useState(["Logan"]);
+    const [message, setMessage] = useState("");
+
+    function sendMessageHandler(e) {
+        if (websocketRef.current && currentRoomId && e.code === "Enter") {
+            console.log("success");
+            let request = {
+                "type": "message",
+                "verb": "post",
+                "content": {
+                    "roomid": currentRoomId,
+                    "message": message
+                },
+            }
+
+            websocketRef.current.send(JSON.stringify(request));
+
+            e.target.value = "";
+            setMessage("");
+        }
+    }
 
     return (
         <div className="Room">
@@ -30,7 +48,9 @@ export default function Room({ userid, username, roomid, socket }) {
 
                 <div className="input-wrapper">
                     {/* Input for message */}
-                    <TextField id="standard-basic" label="Enter message" variant="standard" fullWidth />
+                    <TextField onKeyUp={sendMessageHandler} onChange={(event) => {
+                        setMessage(event.target.value);
+                    }} id="standard-basic" label="Enter message" variant="standard" fullWidth />
                 </div>
             </div>
 

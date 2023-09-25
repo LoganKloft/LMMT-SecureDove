@@ -8,7 +8,7 @@ import Stack from '@mui/material/Stack';
 import { useNavigate } from 'react-router-dom';
 import './Login.scss'
 
-export default function Login() {
+export default function Login({ websocketRef }) {
 
     const [username, setUsername] = useState("");
 
@@ -16,12 +16,22 @@ export default function Login() {
 
     function buttonClickHandler() {
         // attempt to create a websocket
+        websocketRef.current = new WebSocket("ws://localhost:8001/");
 
-        // (later we can enforce unique usernames) if failed:
-        // failure due to duplicate username?
+        // send create profile request when open
+        websocketRef.current.addEventListener("open", () => {
+            let request = {
+                "type": "profile",
+                "verb": "post",
+                "content": {
+                    "username": username
+                }
+            };
 
-        // if successful:
-        // go to home page
+            websocketRef.current.send(JSON.stringify(request));
+        })
+
+        // go to home
         navigate('/home');
     }
 
