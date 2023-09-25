@@ -40,7 +40,7 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
             // current room we're displaying matches the
             // one a response refers to. The exceptions are
             // responses that create a new room (which is above this statement)
-            if (currentRoomId !== response["content"]["roomid"]) {
+            if (currentRoomId.current !== response["content"]["roomid"]) {
                 return;
             }
 
@@ -111,10 +111,6 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
     const handleClickRoom = (event) => {
         if (websocketRef.current) {
             setCurrentRoomId(event.target.dataset.roomid);
-
-            // TODO: for some reason currentRoomID
-            // does not update for Hallway, but does for Room
-            currentRoomId = event.target.dataset.roomid;
 
             let request = {
                 "type": "room",

@@ -7,15 +7,19 @@ export default function Home({ websocketRef }) {
 
     const [messages, setMessages] = useState([])
     const [users, setUsers] = useState([])
-    const [currentRoomId, setCurrentRoomId] = useState("")
+
+    const setCurrentRoomId = data => {
+        roomIDRef.current = data;
+    }
+    const roomIDRef = useRef("");
 
     return (
         <div className="Home">
             {/* hallway creates and joins rooms */}
-            <Hallway setMessages={setMessages} setUsers={setUsers} websocketRef={websocketRef} setCurrentRoomId={setCurrentRoomId} currentRoomId={currentRoomId} />
+            <Hallway setMessages={setMessages} setUsers={setUsers} websocketRef={websocketRef} setCurrentRoomId={(val) => roomIDRef.current = val} currentRoomId={roomIDRef} />
 
             {/* room displays messages, users, and sends messages  */}
-            <Room messages={messages} users={users} currentRoomId={currentRoomId} websocketRef={websocketRef} />
+            <Room messages={messages} users={users} currentRoomId={roomIDRef} websocketRef={websocketRef} />
         </div>
     )
 }

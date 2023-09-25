@@ -10,13 +10,13 @@ export default function Room({ messages, users, currentRoomId, websocketRef }) {
     const [message, setMessage] = useState("");
 
     function sendMessageHandler(e) {
-        if (websocketRef.current && currentRoomId && e.code === "Enter") {
+        if (websocketRef.current && currentRoomId.current && e.code === "Enter") {
             console.log("success");
             let request = {
                 "type": "message",
                 "verb": "post",
                 "content": {
-                    "roomid": currentRoomId,
+                    "roomid": currentRoomId.current,
                     "message": message
                 },
             }
