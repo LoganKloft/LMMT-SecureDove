@@ -67,7 +67,7 @@ import websockets
     "content": {"roomid": "a valid uuid", "message": "A message"},
 }
 
-# client listen for a new message:
+# client listen for a new message: - will update message list
 {
     "type": "message",
     "verb": "get",
@@ -78,7 +78,7 @@ import websockets
     },
 }
 
-# client listen for user to leave a room
+# client listen for user to leave a room - will update user list
 {
     "type": "room",
     "verb": "delete",
@@ -86,6 +86,13 @@ import websockets
         "roomid": "A valid uuid",
         "profiles": ["Logan", "Taylor", "Matthew", "Manjesh"],
     },
+}
+
+# client listen for user to join a room - will update user list
+{
+    "type": "room",
+    "verb": "patch",
+    "content": {"roomid": "A valid uuid", "username": "New user"},
 }
 
 # TODO convert to a class
@@ -97,6 +104,23 @@ PROFILES = {}
 ROOMS = {}
 
 
+async def broadcast(sockets, response):
+    print("===== BROADCAST RESPONSE =====")
+    print(response)
+    print("")
+
+    for socket in sockets:
+        await socket.send(json.dumps(response))
+
+
+async def send(socket, response):
+    print("===== SINGLE REPONSE =====")
+    print(response)
+    print("")
+
+    await socket.send(json.dumps(response))
+
+
 async def parse(profile):
     """
     Receive, process, and respond to messages from a client.
@@ -106,6 +130,11 @@ async def parse(profile):
     async for message in websocket:
         # Parse a event from the client.
         request = json.loads(message)
+
+        print("===== REQUEST =====")
+        print("who: ", profile["username"])
+        print(request)
+        print("")
 
         if request["verb"] == "post":
             if request["type"] == "room":
@@ -126,7 +155,8 @@ async def parse(profile):
                     "verb": "post",
                     "content": {"roomname": roomname, "roomid": roomid},
                 }
-                await websocket.send(json.dumps(response))
+                # await websocket.send(json.dumps(response))
+                await send(websocket, response)
 
             elif request["type"] == "message":
                 # add message to room for new users who join
@@ -148,9 +178,15 @@ async def parse(profile):
                     },
                 }
 
+                sockets = []
                 for userid in ROOMS[roomid]["userids"]:
-                    socket = PROFILES[userid]["socket"]
-                    await socket.send(json.dumps(response))
+                    sockets.append(PROFILES[userid]["socket"])
+
+                await broadcast(sockets, response)
+
+                # for userid in ROOMS[roomid]["userids"]:
+                #     socket = PROFILES[userid]["socket"]
+                #     await socket.send(json.dumps(response))
 
         elif request["verb"] == "get":
             if request["type"] == "room":
@@ -173,7 +209,8 @@ async def parse(profile):
                     },
                 }
 
-                await websocket.send(json.dumps(response))
+                # await websocket.send(json.dumps(response))
+                await send(websocket, response)
 
         elif request["verb"] == "put":
             if request["type"] == "room":
@@ -191,7 +228,21 @@ async def parse(profile):
                     },
                 }
 
-                await websocket.send(json.dumps(response))
+                # await websocket.send(json.dumps(response))
+                await send(websocket, response)
+
+                # now broadcast to all users in the room
+                response = {
+                    "type": "room",
+                    "verb": "patch",
+                    "content": {"roomid": roomid, "username": profile["username"]},
+                }
+
+                sockets = []
+                for userid in ROOMS[roomid]["userids"]:
+                    sockets.append(PROFILES[userid]["socket"])
+
+                await broadcast(sockets, response)
 
 
 # called when a connection is first established

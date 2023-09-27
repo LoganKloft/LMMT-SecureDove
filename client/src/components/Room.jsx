@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import TextField from '@mui/material/TextField';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import './Room.scss';
 
 // when we send a message, we provide the userid which says who is sending the message
@@ -27,6 +30,10 @@ export default function Room({ messages, users, currentRoomId, websocketRef }) {
         }
     }
 
+    function handleCopyRoomCode() {
+        navigator.clipboard.writeText(currentRoomId.current);
+    }
+
     return (
         <div className="Room">
             <div className="content-wrapper">
@@ -50,6 +57,14 @@ export default function Room({ messages, users, currentRoomId, websocketRef }) {
                     <TextField onKeyUp={sendMessageHandler} onChange={(event) => {
                         setMessage(event.target.value);
                     }} id="standard-basic" label="Enter message" variant="standard" fullWidth />
+                    {
+                        currentRoomId.current &&
+                        <Tooltip title="Copy room code">
+                            <IconButton onClick={handleCopyRoomCode}>
+                                <ContentCopyIcon />
+                            </IconButton>
+                        </Tooltip>
+                    }
                 </div>
             </div>
 

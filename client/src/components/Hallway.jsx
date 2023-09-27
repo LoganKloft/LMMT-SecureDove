@@ -10,6 +10,7 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
+import Tooltip from '@mui/material/Tooltip';
 import { useNavigate } from 'react-router-dom';
 import "./Hallway.scss";
 
@@ -31,6 +32,16 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
                         "roomname": response["content"]["roomname"]
                     }
                     setRooms(prev => [...prev, room]);
+                }
+            }
+            else if (response["verb"] === "put") {
+                if (response["type"] === "room") {
+                    // add to rooms
+                    let room = {
+                        "roomid": response["content"]["roomid"],
+                        "roomname": response["content"]["roomname"]
+                    }
+                    setRooms(prev => [...prev, room])
                 }
             }
 
@@ -61,20 +72,17 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
                     setMessages(prev => [...prev, message])
                 }
             }
-            else if (response["verb"] === "put") {
-                if (response["type"] === "room") {
-                    // add to rooms
-                    let room = {
-                        "roomid": response["content"]["roomid"],
-                        "roomname": response["content"]["roomname"]
-                    }
-                    setRooms(prev => [...prev, room])
-                }
-            }
             else if (response["verb"] === "delete") {
                 if (response["type"] === "room") {
                     // re-display users b/c a user left
                     setUsers(response["content"]["profiles"])
+                }
+            }
+            else if (response["verb"] === "patch") {
+                if (response["type"] === "room") {
+                    // we see this message when a new user has joined the room
+                    let username = response["content"]["username"]
+                    setUsers(prev => [...prev, username])
                 }
             }
         })
@@ -155,20 +163,26 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
                     rooms &&
                     rooms.map(room => {
                         return (
-                            <IconButton
-                                key={room.roomid}
-                                onClick={handleClickRoom}>
-                                <p className="roomNameLabel" data-roomid={room.roomid}>{room.roomname[0]}</p>
-                            </IconButton>
+                            <Tooltip title={room.roomname}>
+                                <IconButton
+                                    key={room.roomid}
+                                    onClick={handleClickRoom}>
+                                    <p className="roomNameLabel" data-roomid={room.roomid}>{room.roomname[0]}</p>
+                                </IconButton>
+                            </Tooltip>
                         )
                     })
                 }
-                <IconButton onClick={handleClickOpen}>
-                    <AddIcon />
-                </IconButton>
-                <IconButton onClick={handleLogout}>
-                    <LogoutIcon />
-                </IconButton>
+                <Tooltip title="Create or join a room">
+                    <IconButton onClick={handleClickOpen}>
+                        <AddIcon />
+                    </IconButton>
+                </Tooltip>
+                <Tooltip title="Exit">
+                    <IconButton onClick={handleLogout}>
+                        <LogoutIcon />
+                    </IconButton>
+                </Tooltip>
             </Stack>
 
             <Dialog open={open} onClose={handleClose}>
@@ -190,7 +204,6 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
                     />
                     <Button onClick={handleCreate}>Create</Button>
                     <TextField
-                        autoFocus
                         margin="dense"
                         id="join"
                         label="Existing room id"
