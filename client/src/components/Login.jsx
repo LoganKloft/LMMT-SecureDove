@@ -5,6 +5,7 @@ import InputAdornment from '@mui/material/InputAdornment';
 import FormControl from '@mui/material/FormControl';
 import AccountCircle from '@mui/icons-material/AccountCircle';
 import Stack from '@mui/material/Stack';
+import { Snackbar } from './Snackbar';
 import { useNavigate } from 'react-router-dom';
 import './Login.scss'
 
@@ -20,6 +21,9 @@ export default function Login({ websocketRef }) {
 
         // send create profile request when open
         websocketRef.current.addEventListener("open", () => {
+
+            Snackbar.success("Websocket connection opened!");
+
             let request = {
                 "type": "profile",
                 "verb": "post",
@@ -29,6 +33,10 @@ export default function Login({ websocketRef }) {
             };
 
             websocketRef.current.send(JSON.stringify(request));
+        })
+
+        websocketRef.current.addEventListener("close", () => {
+            Snackbar.error("WebSocket connection closed!")
         })
 
         // go to home

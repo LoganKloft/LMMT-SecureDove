@@ -163,9 +163,8 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
                     rooms &&
                     rooms.map(room => {
                         return (
-                            <Tooltip title={room.roomname}>
+                            <Tooltip key={room.roomid} title={room.roomname}>
                                 <IconButton
-                                    key={room.roomid}
                                     onClick={handleClickRoom}>
                                     <p className="roomNameLabel" data-roomid={room.roomid}>{room.roomname[0]}</p>
                                 </IconButton>
