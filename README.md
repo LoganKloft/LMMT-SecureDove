@@ -9,14 +9,16 @@
 - Manjesh Puram | manjeshreddy.puram@wsu.edu | 11716685 | CONTACT
 - Taylor West | taylor.west@wsu.edu | 11733958
 
+**Install**
+- git clone git@github.com:LoganKloft/LMMT-SecureDove.git
+- cd ./LMMT-SecureDove/client
+- npm install
+- cd ../Server
+- ./senv/Scripts/activate
+- pip install -r requirements.txt
+
 **Run**
 - 3 terminals, 1 in server directory, 2 in client directory
 - in server: senv/Scripts/activate
 - in server: python app.py
-- in 1 single client: npm install
 - in all client(s): npm start
-
-**Does not work?**
-- ensure you have virtualenv installed
-- ensure you are inside of the virtualenv when running python app.py
-- make sure you have all the modules in requirements.txt for python (install them while inside of the virtualenv)
