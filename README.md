@@ -14,14 +14,11 @@
 - cd ./LMMT-SecureDove/client
 - npm install
 - cd ../Server
-- ./senv/Scripts/activate
 - pip install -r requirements.txt
 
 **Run**
-- 3 terminals, 1 in server directory, 2 in client directory
-- in server: senv/Scripts/activate
 - in server: python app.py
-- in all client(s): npm start
+- in client(s): npm start
 
 ![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
 ![JavaScript](https://img.shields.io/badge/javascript-%23323330.svg?style=for-the-badge&logo=javascript&logoColor=%23F7DF1E)
