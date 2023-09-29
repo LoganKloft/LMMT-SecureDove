@@ -14,7 +14,7 @@ import Tooltip from '@mui/material/Tooltip';
 import { useNavigate } from 'react-router-dom';
 import "./Hallway.scss";
 
-export default function Hallway({ setUsers, setMessages, websocketRef, setCurrentRoomId, currentRoomId }) {
+export default function Hallway({ setUsers, setMessages, websocketRef, setCurrentRoomId, currentRoomId, setRoomname }) {
     const [rooms, setRooms] = useState([])
     const [joinValue, setJoinValue] = useState(null);
     const [createValue, setCreateValue] = useState(null);
@@ -62,6 +62,9 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
 
                     // update users
                     setUsers(response["content"]["profiles"])
+
+                    // update roomname
+                    setRoomname(response["content"]["roomname"])
                 }
                 else if (response["type"] === "message") {
                     // add a new message

@@ -8,7 +8,7 @@ import './Room.scss';
 // when we send a message, we provide the userid which says who is sending the message
 // we also need a destination to send the message to, this is the roomid
 // the socket is the vessel for communication
-export default function Room({ messages, users, currentRoomId, websocketRef }) {
+export default function Room({ messages, users, currentRoomId, websocketRef, roomname }) {
 
     const [message, setMessage] = useState("");
 
@@ -70,8 +70,11 @@ export default function Room({ messages, users, currentRoomId, websocketRef }) {
 
             <div className="participants-wrapper">
                 <div>
+                    {/* roomname */}
+                    <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop:'5px', color: 'black', fontFamily: 'Arial, Helvetica, sans-serif', fontSize: '30px', fontWeight: 'bold'}}><p>{roomname}</p></div>
+
                     {/* participants */}
-                    <div>
+                    <div style={{display: 'flex', alignItems: 'left', justifyContent: 'left', color: 'black', flexDirection: 'column', fontSize: '20px'}}>
                         {
                             users &&
                             users.map(user => {
