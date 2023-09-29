@@ -95,20 +95,20 @@ import websockets
     "content": {"roomid": "A valid uuid", "username": "New user"},
 }
 
-# TODO convert to a class
-# uuid -> {"username": "Logan", "socket":socket, "rooms":["uuid1","uuid2"], "userid":"uuid"}
 
+#   The variables are now combined into one class that being the Information class which handles the parsing
+#   of the profile
 
-
-class PROFILE:
+class INFORMATION:
     def __init__(self):
-        self.values = {}
+        self.PROFILES = {}
+        self.ROOMS = {}
 
     async def parse(self):
         """
         Receive, process, and respond to messages from a client.
         """
-        profile = self.values[list(self.values.keys())[0]]
+        profile = self.PROFILES[list(self.PROFILES.keys())[0]]
         # print(profile,type(profile))
 
         websocket = profile["socket"]
@@ -127,13 +127,13 @@ class PROFILE:
                     roomid = str(uuid.uuid4())
                     roomname = request["content"]["roomname"]
 
-                    ROOMS.values[roomid] = {
+                    self.ROOMS[roomid] = {
                         "roomname": roomname,
                         "userids": [profile["userid"]],
                         "messages": [],
                         "roomid": roomid,
                     }
-                    print(ROOMS.values)
+                    # print(ROOMS.values)
                     # emit event to user so they can update ui
                     response = {
                         "type": "room",
@@ -150,7 +150,7 @@ class PROFILE:
                     roomid = request["content"]["roomid"]
                     message = request["content"]["message"]
                     header = f'{profile["username"]} @ {now}'
-                    ROOMS.values[roomid]["messages"].append({"header": header, "message": message})
+                    self.ROOMS[roomid]["messages"].append({"header": header, "message": message})
 
                     # now broadcast single message to everyone in the room (including user sending the message)
                     response = {
@@ -164,8 +164,8 @@ class PROFILE:
                     }
 
                     sockets = []
-                    for userid in ROOMS.values[roomid]["userids"]:
-                        sockets.append(PROFILES.values[userid]["socket"])
+                    for userid in self.ROOMS[roomid]["userids"]:
+                        sockets.append(self.PROFILES[userid]["socket"])
 
                     await broadcast(sockets, response)
 
@@ -176,11 +176,11 @@ class PROFILE:
             elif request["verb"] == "get":
                 if request["type"] == "room":
                     roomid = request["content"]["roomid"]
-                    roomname = ROOMS.values[roomid]["roomname"]
+                    roomname = self.ROOMS[roomid]["roomname"]
                     profiles = list(
                         map(
-                            lambda userid: self.values[userid]["username"],
-                            ROOMS.values[roomid]["userids"],
+                            lambda userid: self.PROFILES[userid]["username"],
+                            self.ROOMS[roomid]["userids"],
                         )
                     )
                     response = {
@@ -190,7 +190,7 @@ class PROFILE:
                             "roomid": roomid,
                             "roomname": roomname,
                             "profiles": profiles,
-                            "messages": ROOMS.values[roomid]["messages"],
+                            "messages": self.ROOMS[roomid]["messages"],
                         },
                     }
 
@@ -200,17 +200,18 @@ class PROFILE:
             elif request["verb"] == "put":
                 if request["type"] == "room":
                     roomid = request["content"]["roomid"]
+                    # print(roomid)
 
-                    # add user to room
-                    print(ROOMS.values)
-                    print(roomid)
-                    ROOMS.values[roomid]["userids"].append(profile["userid"])
+                    # # add user to room
+                    # print(ROOMS.values)
+                    # print(roomid)
+                    self.ROOMS[roomid]["userids"].append(profile["userid"])
 
                     response = {
                         "type": "room",
                         "verb": "put",
                         "content": {
-                            "roomname": ROOMS.values[roomid]["roomname"],
+                            "roomname": self.ROOMS[roomid]["roomname"],
                             "roomid": roomid,
                         },
                     }
@@ -226,19 +227,11 @@ class PROFILE:
                     }
 
                     sockets = []
-                    for userid in ROOMS.values[roomid]["userids"]:
+                    for userid in self.ROOMS[roomid]["userids"]:
                         sockets.append(self.values[userid]["socket"])
 
                     await broadcast(sockets, response)
 
-
-# TODO convert to a class
-# uuid -> {"roomname":"room name", "userids"=["uuid1","uuid2"], "messages": [{"header": "Logan @ 9/24/2023 11:25", "message": "A message"}], "roomid":"uuid"}
-
-
-class ROOM:
-    def __init__(self):
-        self.values = {}
 
 async def broadcast(sockets, response):
     print("===== BROADCAST RESPONSE =====")
@@ -271,13 +264,13 @@ async def handler(websocket):
     userid = str(uuid.uuid4())
     username = request["content"]["username"]
 
-    PROFILES.values[userid] = {
+    INFO.PROFILES[userid] = {
         "username": username,
         "socket": websocket,
         "rooms": [],
         "userid": userid,
     }
-    profile = PROFILES.values[userid]
+    profile = INFO.PROFILES[userid]
     # print(list(PROFILES.values.keys())[0])
     response = {
         "type": "profile",
@@ -288,25 +281,25 @@ async def handler(websocket):
     await websocket.send(json.dumps(response))
 
     try:
-        await PROFILES.parse()
+        await INFO.parse()
 
     finally:
         # for each room this user is a part of:
         for roomid in profile["rooms"]:
             # remove the user from that room
-            ROOMS.values[roomid]["userids"].remove(userid)
+            INFO.ROOMS[roomid]["userids"].remove(userid)
 
             # if no more users left in the room:
-            if not ROOMS.values[roomid]["userids"]:
+            if not INFO.ROOMS[roomid]["userids"]:
                 # delete the ROOM entry
-                del ROOMS.values[roomid]
+                del INFO.ROOMS[roomid]
 
             # if users left in the room broadcast update
             else:
                 profiles = list(
                     map(
-                        lambda userid: PROFILES.values[userid]["name"],
-                        ROOMS.values[roomid]["userids"],
+                        lambda userid: INFO.PROFILES[userid]["name"],
+                        INFO.ROOMS[roomid]["userids"],
                     )
                 )
 
@@ -320,17 +313,18 @@ async def handler(websocket):
                 }
 
                 # broadcast the updated list of room profiles
-                for userid in ROOMS.values[roomid]["userids"]:
-                    socket = PROFILES.values[userid]["socket"]
+                for userid in INFO.ROOMS[roomid]["userids"]:
+                    socket = INFO.PROFILES[userid]["socket"]
                     await socket.send(json.dumps(response))
 
         # remove this user's PROFILE entry
-        del PROFILES.values[userid]
+        del INFO.PROFILES[userid]
 
 
-PROFILES = PROFILE()
-ROOMS = ROOM()
 
+
+# This variable stores all the information needed to run the program in the backend.
+INFO = INFORMATION()
 
 # listen for connections
 async def main():
