@@ -5,6 +5,7 @@ import InputAdornment from '@mui/material/InputAdornment';
 import FormControl from '@mui/material/FormControl';
 import AccountCircle from '@mui/icons-material/AccountCircle';
 import Stack from '@mui/material/Stack';
+import { v4 as uuidv4 } from 'uuid';
 import { Snackbar } from './Snackbar';
 import { useNavigate } from 'react-router-dom';
 import './Login.scss'
@@ -27,6 +28,7 @@ export default function Login({ websocketRef }) {
             let request = {
                 "type": "profile",
                 "verb": "post",
+                "id": uuidv4(),
                 "content": {
                     "username": username
                 }

@@ -11,6 +11,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import Tooltip from '@mui/material/Tooltip';
+import { v4 as uuidv4 } from 'uuid';
 import { useNavigate } from 'react-router-dom';
 import "./Hallway.scss";
 
@@ -23,6 +24,19 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
     function handler(websocketRef) {
         websocketRef.current.addEventListener("message", ({ data }) => {
             const response = JSON.parse(data);
+
+            // ACK server responses
+            if (response["type"] !== "ACK") {
+                let request = {
+                    "type": "ACK",
+                    "verb": "post",
+                    "content": {
+                        "id": response["id"]
+                    }
+                }
+
+                websocketRef.current.send(JSON.stringify(request));
+            }
 
             if (response["verb"] === "post") {
                 if (response["type"] === "room") {
@@ -112,6 +126,7 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
             let request = {
                 "type": "room",
                 "verb": "post",
+                "id": uuidv4(),
                 "content": { "roomname": createValue }
             }
 
@@ -126,6 +141,7 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
             let request = {
                 "type": "room",
                 "verb": "get",
+                "id": uuidv4(),
                 "content": {
                     "roomid": event.target.dataset.roomid
                 }
@@ -142,6 +158,7 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
             let request = {
                 "type": "room",
                 "verb": "put",
+                "id": uuidv4(),
                 "content": { "roomid": joinValue },
             }
 
