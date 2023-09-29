@@ -5,6 +5,8 @@ import asyncio
 import json
 import secrets
 import uuid
+import threading
+import time
 from datetime import datetime
 
 # installed
@@ -12,9 +14,10 @@ import websockets
 
 # to create a profile
 # request:
-{"type": "profile", "verb": "post", "content": {"username": "MyName"}}
+{"type": "profile", "verb": "post", "id": "mid", "content": {"username": "MyName"}}
 # response:
 {
+    "id": "mid",
     "type": "profile",
     "verb": "post",
     "content": {"username": "MyName", "userid": "a valid uuid"},
@@ -22,9 +25,10 @@ import websockets
 
 # to create a room
 # request:
-{"type": "room", "verb": "post", "content": {"roomname": "MyRoom"}}
+{"type": "room", "verb": "post", "id": "mid", "content": {"roomname": "MyRoom"}}
 # response:
 {
+    "id": "mid",
     "type": "room",
     "verb": "post",
     "content": {"roomname": "MyRoom", "roomid": "a valid uuid"},
@@ -32,11 +36,12 @@ import websockets
 
 # to get a room using uuid
 # request:
-{"type": "room", "verb": "get", "content": {"roomid": "a valid uuid"}}
+{"type": "room", "verb": "get", "id": "mid", "content": {"roomid": "a valid uuid"}}
 # response: Messages are in order of time sent. The most recent is first.
 {
     "type": "room",
     "verb": "get",
+    "id": "mid",
     "content": {
         "roomid": "a valid uuid",
         "roomname": "RoomName",
@@ -50,12 +55,14 @@ import websockets
 {
     "type": "room",
     "verb": "put",
+    "id": "mid",
     "content": {"roomid": "a valid uuid"},
 }
 # response:
 {
     "type": "room",
     "verb": "put",
+    "id": "mid",
     "content": {"roomname": "MyRoom", "roomid": "a valid uuid"},
 }
 
@@ -64,6 +71,7 @@ import websockets
 {
     "type": "message",
     "verb": "post",
+    "id": "mid",
     "content": {"roomid": "a valid uuid", "message": "A message"},
 }
 
@@ -71,6 +79,7 @@ import websockets
 {
     "type": "message",
     "verb": "get",
+    "id": "mid",
     "content": {
         "roomid": "A valid uuid",
         "header": "Logan @ 9/24/2023 11:25",
@@ -82,6 +91,7 @@ import websockets
 {
     "type": "room",
     "verb": "delete",
+    "id": "mid",
     "content": {
         "roomid": "A valid uuid",
         "profiles": ["Logan", "Taylor", "Matthew", "Manjesh"],
@@ -92,8 +102,15 @@ import websockets
 {
     "type": "room",
     "verb": "patch",
+    "id": "mid",
     "content": {"roomid": "A valid uuid", "username": "New user"},
 }
+
+# server sends ACK message for client requests
+{"type": "ACK", "verb": "post", "content": {"id": "mid"}}
+
+# server receives ACK message from client
+{"type": "ACK", "verb": "post", "content": {"id": "mid"}}
 
 # TODO convert to a class
 # uuid -> {"username": "Logan", "socket":socket, "rooms":["uuid1","uuid2"], "userid":"uuid"}
@@ -103,6 +120,19 @@ PROFILES = {}
 # uuid -> {"roomname":"room name", "userids"=["uuid1","uuid2"], "messages": [{"header": "Logan @ 9/24/2023 11:25", "message": "A message"}], "roomid":"uuid"}
 ROOMS = {}
 
+# when sending a response, we add that to the ACK_QUEUE
+# then when the client ACKS it, we remove the response from the 'QUEUE'
+# ideally after a TimeToLive (TTL) we resend the response
+# message uuid -> message
+ACK_QUEUE = {}
+
+connections = 0
+max_connections = 10  # not being used right now
+requests_received = 0
+requests_acked = 0
+responses_sent = 0
+responses_acked = 0
+
 
 async def broadcast(sockets, response):
     print("===== BROADCAST RESPONSE =====")
@@ -110,11 +140,32 @@ async def broadcast(sockets, response):
     print("")
 
     for socket in sockets:
+        # add response id to each response - creating a new one for each message sent to a profile
+        mid = str(uuid.uuid4())
+        response["id"] = mid
+        ACK_QUEUE[mid] = response
+        responses_sent += 1
         await socket.send(json.dumps(response))
 
 
 async def send(socket, response):
     print("===== SINGLE REPONSE =====")
+    print(response)
+    print("")
+
+    # add response id to response
+    mid = str(uuid.uuid4())
+    response["id"] = mid
+    ACK_QUEUE[mid] = response
+    responses_sent += 1
+    await socket.send(json.dumps(response))
+
+
+async def sendAck(socket, request):
+    mid = request["id"]
+    response = {"type": "ACK", "verb": "post", "content": {"id": mid}}
+
+    print("===== SEND ACK =====")
     print(response)
     print("")
 
@@ -131,10 +182,22 @@ async def parse(profile):
         # Parse a event from the client.
         request = json.loads(message)
 
+        # if type is not ACK we will send a quick ACK
+        if request["type"] != "ACK":
+            await sendAck(websocket, response)
+            requests_acked
+
+        else:
+            mid = request["id"]
+            del ACK_QUEUE[mid]
+            responses_acked += 1
+            continue
+
         print("===== REQUEST =====")
         print("who: ", profile["username"])
         print(request)
         print("")
+        requests_received += 1
 
         if request["verb"] == "post":
             if request["type"] == "room":
@@ -252,6 +315,8 @@ async def handler(websocket):
     Handle a new connection.
 
     """
+    connections += 1
+
     # wait for the first request
     event = await websocket.recv()
     request = json.loads(event)
@@ -317,8 +382,27 @@ async def handler(websocket):
         del PROFILES[userid]
 
 
+def logger():
+    with open("./audit.txt", "a") as audit:
+        while True:
+            now = datetime.now()
+            now = now.strftime("%d/%m/%Y %H:%M:%S")
+            audit.write(f"time: {now}")
+            audit.write(f"connections: {connections}")
+            audit.write(f"requests_received: {requests_received}")
+            audit.write(f"requests_acked: {requests_acked}")
+            audit.write(f"responses_sent: {responses_sent}")
+            audit.write(f"responses_acked: {responses_acked}")
+            time.sleep(5)
+
+
 # listen for connections
 async def main():
+    # for logging every 5 seconds
+    thread = Thread(target=logger)
+    thread.start()
+
+    # handle incoming connections
     async with websockets.serve(handler, "", 8001):
         await asyncio.Future()  # run forever
 
