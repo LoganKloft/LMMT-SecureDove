@@ -97,12 +97,148 @@ import websockets
 
 # TODO convert to a class
 # uuid -> {"username": "Logan", "socket":socket, "rooms":["uuid1","uuid2"], "userid":"uuid"}
-PROFILES = {}
+
+
+
+class PROFILE:
+    def __init__(self):
+        self.values = {}
+
+    async def parse(self):
+        """
+        Receive, process, and respond to messages from a client.
+        """
+        profile = self.values[list(self.values.keys())[0]]
+        # print(profile,type(profile))
+
+        websocket = profile["socket"]
+        async for message in websocket:
+            # Parse a event from the client.
+            request = json.loads(message)
+
+            print("===== REQUEST =====")
+            print("who: ", profile["username"])
+            print(request)
+            print("")
+
+            if request["verb"] == "post":
+                if request["type"] == "room":
+                    # create a room
+                    roomid = str(uuid.uuid4())
+                    roomname = request["content"]["roomname"]
+
+                    ROOMS.values[roomid] = {
+                        "roomname": roomname,
+                        "userids": [profile["userid"]],
+                        "messages": [],
+                        "roomid": roomid,
+                    }
+                    print(ROOMS.values)
+                    # emit event to user so they can update ui
+                    response = {
+                        "type": "room",
+                        "verb": "post",
+                        "content": {"roomname": roomname, "roomid": roomid},
+                    }
+                    # await websocket.send(json.dumps(response))
+                    await send(websocket, response)
+
+                elif request["type"] == "message":
+                    # add message to room for new users who join
+                    now = datetime.now()
+                    now = now.strftime("%d/%m/%Y %H:%M:%S")
+                    roomid = request["content"]["roomid"]
+                    message = request["content"]["message"]
+                    header = f'{profile["username"]} @ {now}'
+                    ROOMS.values[roomid]["messages"].append({"header": header, "message": message})
+
+                    # now broadcast single message to everyone in the room (including user sending the message)
+                    response = {
+                        "type": "message",
+                        "verb": "get",
+                        "content": {
+                            "roomid": roomid,
+                            "header": header,
+                            "message": message,
+                        },
+                    }
+
+                    sockets = []
+                    for userid in ROOMS.values[roomid]["userids"]:
+                        sockets.append(PROFILES.values[userid]["socket"])
+
+                    await broadcast(sockets, response)
+
+                    # for userid in ROOMS[roomid]["userids"]:
+                    #     socket = PROFILES[userid]["socket"]
+                    #     await socket.send(json.dumps(response))
+
+            elif request["verb"] == "get":
+                if request["type"] == "room":
+                    roomid = request["content"]["roomid"]
+                    roomname = ROOMS.values[roomid]["roomname"]
+                    profiles = list(
+                        map(
+                            lambda userid: self.values[userid]["username"],
+                            ROOMS.values[roomid]["userids"],
+                        )
+                    )
+                    response = {
+                        "type": "room",
+                        "verb": "get",
+                        "content": {
+                            "roomid": roomid,
+                            "roomname": roomname,
+                            "profiles": profiles,
+                            "messages": ROOMS.values[roomid]["messages"],
+                        },
+                    }
+
+                    # await websocket.send(json.dumps(response))
+                    await send(websocket, response)
+
+            elif request["verb"] == "put":
+                if request["type"] == "room":
+                    roomid = request["content"]["roomid"]
+
+                    # add user to room
+                    print(ROOMS.values)
+                    print(roomid)
+                    ROOMS.values[roomid]["userids"].append(profile["userid"])
+
+                    response = {
+                        "type": "room",
+                        "verb": "put",
+                        "content": {
+                            "roomname": ROOMS.values[roomid]["roomname"],
+                            "roomid": roomid,
+                        },
+                    }
+
+                    # await websocket.send(json.dumps(response))
+                    await send(websocket, response)
+
+                    # now broadcast to all users in the room
+                    response = {
+                        "type": "room",
+                        "verb": "patch",
+                        "content": {"roomid": roomid, "username": profile["username"]},
+                    }
+
+                    sockets = []
+                    for userid in ROOMS.values[roomid]["userids"]:
+                        sockets.append(self.values[userid]["socket"])
+
+                    await broadcast(sockets, response)
+
 
 # TODO convert to a class
 # uuid -> {"roomname":"room name", "userids"=["uuid1","uuid2"], "messages": [{"header": "Logan @ 9/24/2023 11:25", "message": "A message"}], "roomid":"uuid"}
-ROOMS = {}
 
+
+class ROOM:
+    def __init__(self):
+        self.values = {}
 
 async def broadcast(sockets, response):
     print("===== BROADCAST RESPONSE =====")
@@ -120,131 +256,6 @@ async def send(socket, response):
 
     await socket.send(json.dumps(response))
 
-
-async def parse(profile):
-    """
-    Receive, process, and respond to messages from a client.
-
-    """
-    websocket = profile["socket"]
-    async for message in websocket:
-        # Parse a event from the client.
-        request = json.loads(message)
-
-        print("===== REQUEST =====")
-        print("who: ", profile["username"])
-        print(request)
-        print("")
-
-        if request["verb"] == "post":
-            if request["type"] == "room":
-                # create a room
-                roomid = str(uuid.uuid4())
-                roomname = request["content"]["roomname"]
-
-                ROOMS[roomid] = {
-                    "roomname": roomname,
-                    "userids": [profile["userid"]],
-                    "messages": [],
-                    "roomid": roomid,
-                }
-
-                # emit event to user so they can update ui
-                response = {
-                    "type": "room",
-                    "verb": "post",
-                    "content": {"roomname": roomname, "roomid": roomid},
-                }
-                # await websocket.send(json.dumps(response))
-                await send(websocket, response)
-
-            elif request["type"] == "message":
-                # add message to room for new users who join
-                now = datetime.now()
-                now = now.strftime("%d/%m/%Y %H:%M:%S")
-                roomid = request["content"]["roomid"]
-                message = request["content"]["message"]
-                header = f'{profile["username"]} @ {now}'
-                ROOMS[roomid]["messages"].append({"header": header, "message": message})
-
-                # now broadcast single message to everyone in the room (including user sending the message)
-                response = {
-                    "type": "message",
-                    "verb": "get",
-                    "content": {
-                        "roomid": roomid,
-                        "header": header,
-                        "message": message,
-                    },
-                }
-
-                sockets = []
-                for userid in ROOMS[roomid]["userids"]:
-                    sockets.append(PROFILES[userid]["socket"])
-
-                await broadcast(sockets, response)
-
-                # for userid in ROOMS[roomid]["userids"]:
-                #     socket = PROFILES[userid]["socket"]
-                #     await socket.send(json.dumps(response))
-
-        elif request["verb"] == "get":
-            if request["type"] == "room":
-                roomid = request["content"]["roomid"]
-                roomname = ROOMS[roomid]["roomname"]
-                profiles = list(
-                    map(
-                        lambda userid: PROFILES[userid]["username"],
-                        ROOMS[roomid]["userids"],
-                    )
-                )
-                response = {
-                    "type": "room",
-                    "verb": "get",
-                    "content": {
-                        "roomid": roomid,
-                        "roomname": roomname,
-                        "profiles": profiles,
-                        "messages": ROOMS[roomid]["messages"],
-                    },
-                }
-
-                # await websocket.send(json.dumps(response))
-                await send(websocket, response)
-
-        elif request["verb"] == "put":
-            if request["type"] == "room":
-                roomid = request["content"]["roomid"]
-
-                # add user to room
-                ROOMS[roomid]["userids"].append(profile["userid"])
-
-                response = {
-                    "type": "room",
-                    "verb": "put",
-                    "content": {
-                        "roomname": ROOMS[roomid]["roomname"],
-                        "roomid": roomid,
-                    },
-                }
-
-                # await websocket.send(json.dumps(response))
-                await send(websocket, response)
-
-                # now broadcast to all users in the room
-                response = {
-                    "type": "room",
-                    "verb": "patch",
-                    "content": {"roomid": roomid, "username": profile["username"]},
-                }
-
-                sockets = []
-                for userid in ROOMS[roomid]["userids"]:
-                    sockets.append(PROFILES[userid]["socket"])
-
-                await broadcast(sockets, response)
-
-
 # called when a connection is first established
 # we need to create a profile and then respond to future requests
 async def handler(websocket):
@@ -260,14 +271,14 @@ async def handler(websocket):
     userid = str(uuid.uuid4())
     username = request["content"]["username"]
 
-    PROFILES[userid] = {
+    PROFILES.values[userid] = {
         "username": username,
         "socket": websocket,
         "rooms": [],
         "userid": userid,
     }
-    profile = PROFILES[userid]
-
+    profile = PROFILES.values[userid]
+    # print(list(PROFILES.values.keys())[0])
     response = {
         "type": "profile",
         "verb": "post",
@@ -277,25 +288,25 @@ async def handler(websocket):
     await websocket.send(json.dumps(response))
 
     try:
-        await parse(profile)
+        await PROFILES.parse()
 
     finally:
         # for each room this user is a part of:
         for roomid in profile["rooms"]:
             # remove the user from that room
-            ROOMS[roomid]["userids"].remove(userid)
+            ROOMS.values[roomid]["userids"].remove(userid)
 
             # if no more users left in the room:
-            if not ROOMS[roomid]["userids"]:
+            if not ROOMS.values[roomid]["userids"]:
                 # delete the ROOM entry
-                del ROOMS[roomid]
+                del ROOMS.values[roomid]
 
             # if users left in the room broadcast update
             else:
                 profiles = list(
                     map(
-                        lambda userid: PROFILES[userid]["name"],
-                        ROOMS[roomid]["userids"],
+                        lambda userid: PROFILES.values[userid]["name"],
+                        ROOMS.values[roomid]["userids"],
                     )
                 )
 
@@ -309,12 +320,16 @@ async def handler(websocket):
                 }
 
                 # broadcast the updated list of room profiles
-                for userid in ROOMS[roomid]["userids"]:
-                    socket = PROFILES[userid]["socket"]
+                for userid in ROOMS.values[roomid]["userids"]:
+                    socket = PROFILES.values[userid]["socket"]
                     await socket.send(json.dumps(response))
 
         # remove this user's PROFILE entry
-        del PROFILES[userid]
+        del PROFILES.values[userid]
+
+
+PROFILES = PROFILE()
+ROOMS = ROOM()
 
 
 # listen for connections
