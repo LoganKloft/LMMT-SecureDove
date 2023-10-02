@@ -11,8 +11,10 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import Tooltip from '@mui/material/Tooltip';
+import { GlobalCryptoState } from './CryptoState';
 import { v4 as uuidv4 } from 'uuid';
 import { useNavigate } from 'react-router-dom';
+import fernet from 'fernet';
 import "./Hallway.scss";
 
 export default function Hallway({ setUsers, setMessages, websocketRef, setCurrentRoomId, currentRoomId, setRoomname }) {
@@ -22,17 +24,69 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
     const [open, setOpen] = useState(false);
 
     function handler(websocketRef) {
-        websocketRef.current.addEventListener("message", ({ data }) => {
+        websocketRef.current.addEventListener("message", async ({ data }) => {
             const response = JSON.parse(data);
+
+            if (response["type"] === "profile") {
+                if (response["verb"] === "post") {
+                    // // server sending us symmetric key
+                    // try {
+                    //     const textEncoder = new TextEncoder();
+                    //     let encoded = textEncoder.encode(response["content"]);
+                    //     console.log(encoded);
+                    //     console.log(GlobalCryptoState.getKeyPair().privateKey);
+                    //     let content = window.crypto.subtle.decrypt(
+                    //         {
+                    //             name: "RSA-OAEP"
+                    //         },
+                    //         GlobalCryptoState.getKeyPair().privateKey,
+                    //         encoded
+                    //     ); // decrypted
+                    //     // let dec = new TextDecoder();
+                    //     // content = dec.decode(content) // decoded
+                    //     // content = JSON.parse(content); // jsonified
+                    //     // console.log(content);
+
+                    //     // GlobalCryptoState.setSymmetric(content["symmetric"]);
+                    // } catch (e) {
+                    //     console.log(e);
+                    // }
+                    GlobalCryptoState.setSymmetric(response["content"]["symmetric"]);
+                    console.log(response);
+                    return;
+                }
+            }
+
+            // messages recieved here have "content" encrypted
+            console.log(response["content"]);
+            let secret = new fernet.Secret(GlobalCryptoState.getSymmetric());
+            let token = new fernet.Token({
+                secret: secret,
+                token: response["content"],
+            });
+            let content = token.decode();
+            console.log("content", content);
+            response["content"] = JSON.parse(content);
 
             // ACK server responses
             if (response["type"] !== "ACK") {
+                let symmetric = GlobalCryptoState.getSymmetric();
+                console.log(symmetric.length);
+                let secret = new fernet.Secret(symmetric);
+                let token = new fernet.Token({
+                    secret: secret,
+                })
+
+                let content = {
+                    "id": response["id"]
+                };
+                content = JSON.stringify(content);
+                content = token.encode(content);
+
                 let request = {
                     "type": "ACK",
                     "verb": "post",
-                    "content": {
-                        "id": response["id"]
-                    }
+                    "content": content
                 }
 
                 websocketRef.current.send(JSON.stringify(request));
@@ -123,11 +177,24 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
         handleClose();
 
         if (websocketRef.current) {
+            let symmetric = GlobalCryptoState.getSymmetric();
+            console.log(symmetric.length);
+            let secret = new fernet.Secret(symmetric);
+            let token = new fernet.Token({
+                secret: secret,
+            })
+
+            let content = { "roomname": createValue };
+            content = JSON.stringify(content);
+            content = token.encode(content);
+
+            console.log(content);
+
             let request = {
                 "type": "room",
                 "verb": "post",
                 "id": uuidv4(),
-                "content": { "roomname": createValue }
+                "content": content
             }
 
             websocketRef.current.send(JSON.stringify(request));
@@ -138,13 +205,24 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
         if (websocketRef.current) {
             setCurrentRoomId(event.target.dataset.roomid);
 
+            let symmetric = GlobalCryptoState.getSymmetric();
+            console.log(symmetric.length);
+            let secret = new fernet.Secret(symmetric);
+            let token = new fernet.Token({
+                secret: secret,
+            })
+
+            let content = {
+                "roomid": event.target.dataset.roomid
+            };
+            content = JSON.stringify(content);
+            content = token.encode(content);
+
             let request = {
                 "type": "room",
                 "verb": "get",
                 "id": uuidv4(),
-                "content": {
-                    "roomid": event.target.dataset.roomid
-                }
+                "content": content
             }
 
             websocketRef.current.send(JSON.stringify(request));
@@ -154,12 +232,23 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
     const handleJoin = () => {
         handleClose();
 
+        let symmetric = GlobalCryptoState.getSymmetric();
+        console.log(symmetric.length);
+        let secret = new fernet.Secret(symmetric);
+        let token = new fernet.Token({
+            secret: secret,
+        })
+
+        let content = { "roomid": joinValue };
+        content = JSON.stringify(content);
+        content = token.encode(content);
+
         if (websocketRef.current) {
             let request = {
                 "type": "room",
                 "verb": "put",
                 "id": uuidv4(),
-                "content": { "roomid": joinValue },
+                "content": content,
             }
 
             websocketRef.current.send(JSON.stringify(request));

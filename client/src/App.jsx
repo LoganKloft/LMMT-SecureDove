@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { SnackbarProvider } from 'notistack';
 import { SnackbarUtilsConfigurator } from './components/Snackbar';
+import { InitializeCryptoState } from './components/CryptoState';
 import './App.scss'
 import Login from './components/Login';
 import Home from './components/Home';
@@ -21,6 +22,7 @@ function App() {
       >
         <SnackbarUtilsConfigurator />
       </SnackbarProvider>
+      <InitializeCryptoState />
     </div>
   );
 }

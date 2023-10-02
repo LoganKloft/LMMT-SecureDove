@@ -3,6 +3,8 @@ import TextField from '@mui/material/TextField';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import { GlobalCryptoState } from './CryptoState';
+import fernet from 'fernet';
 import { v4 as uuidv4 } from 'uuid';
 import './Room.scss';
 
@@ -15,14 +17,25 @@ export default function Room({ messages, users, currentRoomId, websocketRef, roo
 
     function sendMessageHandler(e) {
         if (websocketRef.current && currentRoomId.current && e.code === "Enter") {
+            let symmetric = GlobalCryptoState.getSymmetric();
+            console.log(symmetric.length);
+            let secret = new fernet.Secret(symmetric);
+            let token = new fernet.Token({
+                secret: secret,
+            })
+
+            let content = {
+                "roomid": currentRoomId.current,
+                "message": message
+            };
+            content = JSON.stringify(content);
+            content = token.encode(content);
+
             let request = {
                 "type": "message",
                 "verb": "post",
                 "id": uuidv4(),
-                "content": {
-                    "roomid": currentRoomId.current,
-                    "message": message
-                },
+                "content": content,
             }
 
             websocketRef.current.send(JSON.stringify(request));
