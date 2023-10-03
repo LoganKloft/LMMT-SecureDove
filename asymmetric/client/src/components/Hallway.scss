@@ -1,0 +1,24 @@
+@import '../colors.scss';
+
+.Hallway {
+    background-color: $primary;
+    width: 5%;
+
+    button {
+        width: fit-content;
+        height: fit-content;
+    }
+
+    overflow-y: scroll;
+
+    .roomNameLabel {
+        width: 25px;
+        height: 25px;
+        margin: 0px;
+        padding: 0px;
+    }
+}
+
+.Hallway::-webkit-scrollbar {
+    display: none;
+}
