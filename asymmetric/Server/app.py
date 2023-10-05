@@ -244,6 +244,7 @@ async def parse(profile):
                         "type": "message",
                         "verb": "get",
                         "content": {
+                            "username": profile["username"],
                             "roomid": roomid,
                             "header": header,
                             "message": message,
@@ -252,7 +253,8 @@ async def parse(profile):
 
                     sockets = []
                     for userid in ROOMS[roomid]["userids"]:
-                        sockets.append(PROFILES[userid]["socket"])
+                        if PROFILES[userid]["username"] == request["content"]["target"]:
+                            sockets.append(PROFILES[userid]["socket"])
 
                     await broadcast(sockets, response)
 
@@ -346,7 +348,12 @@ async def parse(profile):
                     },
                 }
 
-                await broadcast(PROFILES[request["content"]["target"]].socket, response)
+                sockets = []
+                for userid in ROOMS[roomid]["userids"]:
+                    if PROFILES[userid]["username"] == request["content"]["target"]:
+                        sockets.append(PROFILES[userid]["socket"])
+
+                await broadcast(sockets, response)
 
         except Exception as e:
             print("ERROR")

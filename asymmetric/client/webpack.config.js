@@ -1,6 +1,6 @@
 const webpack = require('webpack');
 const path = require('path');
-const NodePolyfillPlugin = require("node-polyfill-webpack-plugin");
+const NodePolyfillPlugin = require('node-polyfill-webpack-plugin');
 
 const config = {
   entry: './src/index.js',
@@ -25,7 +25,13 @@ const config = {
       }
     ]
   },
+//  resolve: {
+//    fallback: {
+//      stream: false,
+//    },
+//  },
   plugins: [
+    //new NodePolyfillPlugin({ excludeAliases: ['stream'] })
     new NodePolyfillPlugin()
   ]
 };

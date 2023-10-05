@@ -17,12 +17,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { useNavigate } from 'react-router-dom';
 import "./Hallway.scss";
 
-export default function Hallway({ setSharedSecretKeys, sharedSecretKeys, setUsers, setMessages, websocketRef, setCurrentRoomId, currentRoomId, setRoomname, username }) {
+export default function Hallway({ keyObject, publicKey, setSharedSecretKeys, sharedSecretKeys, setUsers, setMessages, websocketRef, setCurrentRoomId, currentRoomId, setRoomname, username }) {
     const [rooms, setRooms] = useState([])
     const [joinValue, setJoinValue] = useState(null);
     const [createValue, setCreateValue] = useState(null);
     const [open, setOpen] = useState(false);
-    const [keyObject, setKeyObject] = useState(crypto.createECDH('prime192v1'));
 
     function handler(websocketRef) {
         websocketRef.current.addEventListener("message", ({ data }) => {
@@ -85,10 +84,11 @@ export default function Hallway({ setSharedSecretKeys, sharedSecretKeys, setUser
                 }
                 else if (response["type"] === "message") {
                     // add a new message
-                    let message = {
-                        "header": response["content"]["header"],
-                        "message": response["content"]["message"]
-                    }
+                    //let message = {
+                    //    "header": response["content"]["header"],
+                    //    "message": response["content"]["message"]
+                    //}
+		    let message = response["content"];
                     setMessages(prev => [...prev, message])
                 }
             }
@@ -106,15 +106,11 @@ export default function Hallway({ setSharedSecretKeys, sharedSecretKeys, setUser
                 }
             }
 	    else if (response["verb"] == "dh1") {
-		if (response["content"]["username"] == username) return;
-
-		console.log(`${username} receives public key from ${response["content"]["username"]}`);
-
 		const receivedPublicKey = Buffer.from(response["content"]["publicKey"], 'base64');
 		const secretKey = keyObject.computeSecret(receivedPublicKey);
-		const publicKeyBase64 = keyObject.generateKeys().toString('base64');
+		const publicKeyBase64 = publicKey.toString('base64');
 
-		setSharedSecretKeys({...sharedSecretKeys, [response["content"]["username"]]: secretKey });
+		setSharedSecretKeys(secretKeys => ({ [response["content"]["username"]]: secretKey, ...secretKeys }));
 
 		let request = {
 		    "type": "room",
@@ -130,12 +126,9 @@ export default function Hallway({ setSharedSecretKeys, sharedSecretKeys, setUser
 		websocketRef.current.send(JSON.stringify(request));
 	    }
 	    else if (response["verb"] == "dh2") {
-		// honk
 		const receivedPublicKey = Buffer.from(response["content"]["publicKey"], 'base64');
 		const secretKey = keyObject.computeSecret(receivedPublicKey);
-
-		setSharedSecretKeys({...sharedSecretKeys, [response["content"]["username"]]: secretKey });
-		console.log(`${username} gets secret key for comms with ${response["content"]["username"]}`);
+		setSharedSecretKeys(secretKeys => ({ [response["content"]["username"]]: secretKey, ...secretKeys }));
 	    }
 	})
     }
@@ -190,7 +183,7 @@ export default function Hallway({ setSharedSecretKeys, sharedSecretKeys, setUser
                 "id": uuidv4(),
                 "content": {
                     "roomid": event.target.dataset.roomid,
-		    "publicKey": keyObject.generateKeys().toString('base64'),
+		    "publicKey": publicKey.toString('base64'),
                 }
             }
 

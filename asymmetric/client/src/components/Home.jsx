@@ -3,7 +3,7 @@ import Hallway from './Hallway';
 import Room from './Room';
 import "./Home.scss";
 
-export default function Home({ websocketRef, username }) {
+export default function Home({ keyObject, publicKey, websocketRef, username }) {
     const [messages, setMessages] = useState([]);
     const [users, setUsers] = useState([]);
     const [roomname, setRoomname] = useState("");
@@ -21,6 +21,8 @@ export default function Home({ websocketRef, username }) {
 	             websocketRef={websocketRef}
 	             setCurrentRoomId={(val) => roomIDRef.current = val}
 	             currentRoomId={roomIDRef}
+	             keyObject={keyObject}
+	             publicKey={publicKey}
 	             setRoomname={setRoomname} 
 		     username={username} />
 
@@ -30,6 +32,8 @@ export default function Home({ websocketRef, username }) {
 	          users={users}
 	          currentRoomId={roomIDRef}
 	          websocketRef={websocketRef}
+		  keyObject={keyObject}
+		  publicKey={publicKey}
 	          username={username}
 	          roomname={roomname} />
         </div>

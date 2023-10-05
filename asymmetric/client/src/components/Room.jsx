@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import crypto from 'crypto-browserify';
 import TextField from '@mui/material/TextField';
 import IconButton from '@mui/material/IconButton';
@@ -48,37 +48,37 @@ export default function Room({ sharedSecretKeys, messages, users, currentRoomId,
 
     function sendMessageHandler(e) {
         if (websocketRef.current && currentRoomId.current && e.code === "Enter") {
-	    console.log(users);
-
 	    for (const user of users) {
-		console.log(user, username);
-		if (user == username) continue;
-
-		console.log(Object.entries(sharedSecretKeys));
-
 		const secretKey = sharedSecretKeys[user];
 
-		const encryptedMessage = encrypt(
-		    message,
-		    secretKey
-		);
-
-		let request = {
-		    "type": "message",
-		    "verb": "post",
-		    "id": uuidv4(),
-		    "content": {
-			"roomid": currentRoomId.current,
-			"message": encryptedMessage,
-			"target": user,
-		    },
+		if (secretKey == undefined) {
+		    console.log(`Can't send message to ${user}! (missing secret key)`);
+		    continue;
 		}
 
-		websocketRef.current.send(JSON.stringify(request));
+		(async () => {
+		    const encryptedMessage = await encrypt(
+			message,
+			secretKey.toString('base64')
+		    );
 
-		e.target.value = "";
-		setMessage("");
+		    let request = {
+			"type": "message",
+			"verb": "post",
+			"id": uuidv4(),
+			"content": {
+			    "roomid": currentRoomId.current,
+			    "message": encryptedMessage,
+			    "target": user,
+			},
+		    }
+
+		    websocketRef.current.send(JSON.stringify(request));
+		})();
 	    }
+
+	    e.target.value = "";
+	    setMessage("");
         }
     }
 
@@ -86,14 +86,30 @@ export default function Room({ sharedSecretKeys, messages, users, currentRoomId,
         navigator.clipboard.writeText(currentRoomId.current);
     }
 
+    const [decryptedMessages, setDecryptedMessages] = useState(null);
+
+    useEffect(() => {
+	(async () => {
+	    Promise.all(messages.map(async (message) => {
+		let key = sharedSecretKeys[message.username];
+		if (key == undefined)
+		    return { "header": message.header, "message": "encrypted message :(" };
+		let decrypted = await decrypt(message.message, key.toString('base64'));
+		return { "header": message.header, "message": decrypted };
+	    })).then(decryptedMessages => {
+		setDecryptedMessages(decryptedMessages)
+	    });
+	})();
+    }, [messages, sharedSecretKeys]);
+
     return (
         <div className="Room">
             <div className="content-wrapper">
                 <div className="messages-wrapper">
                     {/* Display messages*/}
                     {
-                        messages &&
-                        messages.map(message => {
+                        decryptedMessages &&
+                        decryptedMessages.map(message => {
                             return (
                                 <div className="message">
                                     <p className="messageHeader">{message.header}</p>
