@@ -7,20 +7,59 @@ import secrets
 import uuid
 import threading
 import time
+import base64
 from datetime import datetime
 
 # installed
 import websockets
 
+# import rsa
+from cryptography.fernet import Fernet  # symmetric encryption
+from Crypto.Cipher import PKCS1_OAEP
+from Crypto.PublicKey import RSA
+
+# when a client wants to create a profile, it will establish a symmetric key with the server
+# communication between client and server will use this symmetric key for all messages
+
+# when a client wants to create a room, a symmetric key will be created for that room
+# the client will be sent the symmetric key
+
+# when future clients join the room they will receieve the symmetric key from the server
+
+# this means that the server stores all symmetric keys!
+
+# How to accomplish the above?
+# each client will generate a public / private key pair before the create profile request is sent
+# when a profile request is sent, the client will include its public key
+# then the server will generate a symmetric key and use the profile's public key to encrypt it
+# the profile will then decrypt the symmetric key and store it
+# now all messages will be encrypted and decrypted using this symmetric key
+
+# when a client creates a room, the server will generate a new symmetric key for that room
+# when a client joins a chat room, the server will use the client's public key to send the symmetric key for the room
+# all room messages will use this symmetric key in addition to the overall request being encypted using the first symmetric key
+
+# symmetric encryption: Fernet - guarantees confidentiality AND integrity (throw error if message tampering detected)
+# asymmetric encryption:
+
 # to create a profile
 # request:
-{"type": "profile", "verb": "post", "id": "mid", "content": {"username": "MyName"}}
+{
+    "type": "profile",
+    "verb": "post",
+    "id": "mid",
+    "content": {"username": "MyName", "public": "client's public key"},
+}
 # response:
 {
     "id": "mid",
     "type": "profile",
     "verb": "post",
-    "content": {"username": "MyName", "userid": "a valid uuid"},
+    "content": {
+        "username": "MyName",
+        "userid": "a valid uuid",
+        "symmetric": "shared symmetric key",
+    },
 }
 
 # to create a room
@@ -58,7 +97,7 @@ import websockets
     "id": "mid",
     "content": {"roomid": "a valid uuid"},
 }
-# response:
+# response: update hallway, but won't actually put user in the room until they click the hallway icon!!
 {
     "type": "room",
     "verb": "put",
@@ -112,158 +151,168 @@ import websockets
 # server receives ACK message from client
 {"type": "ACK", "verb": "post", "content": {"id": "mid"}}
 
-
 class INFORMATION:
     def __init__(self):
         self.PROFILES = {}
         self.ROOMS = {}
 
-    async def parse(self):
-        """
-        Receive, process, and respond to messages from a client.
+    async def parse(self,profile):
+    """
+    Receive, process, and respond to messages from a client.
+    All received messsages are encrypted.
 
-        """
-        global requests_received
-        global responses_acked
-        global requests_acked
+    """
+    global requests_received
+    global responses_acked
+    global requests_acked
 
-        profile = self.PROFILES[list(self.PROFILES.keys())[0]]
-        websocket = profile["socket"]
-        async for message in websocket:
-            try:
-                # Parse a event from the client.
-                request = json.loads(message)
-                print(request)
-                # if type is not ACK we will send a quick ACK
-                if request["type"] != "ACK":
-                    await sendAck(websocket, request)
-                    requests_acked += 1
+    async for message in profile["socket"]:
+        try:
+            # Parse a event from the client.
+            request = json.loads(message)
 
-                else:
-                    mid = request["content"]["id"]
-                    del ACK_QUEUE[mid]
-                    responses_acked += 1
-                    continue
+            # decrypt content
+            fernet = Fernet(profile["symmetric"])
+            content = request["content"]  # an encrypted string
+            print("IN PARSER")
+            print(content)
+            content = fernet.decrypt(content)  # a decrypted byte string
+            content = content.decode()  # a string of json
+            content = json.loads(content)  # json
+            request["content"] = content
+            print("FINISH DECODE")
+            print(request)
+            # if type is not ACK we will send a quick ACK
+            if request["type"] != "ACK":
+                await sendAckEncrypted(profile, request)
+                requests_acked += 1
 
-                print("===== REQUEST =====")
-                print("who: ", profile["username"])
-                print(request)
-                print("")
-                requests_received += 1
+            else:
+                mid = request["content"]["id"]
+                del ACK_QUEUE[mid]
+                responses_acked += 1
+                continue
 
-                if request["verb"] == "post":
-                    if request["type"] == "room":
-                        # create a room
-                        roomid = str(uuid.uuid4())
-                        roomname = request["content"]["roomname"]
+            print("===== REQUEST =====")
+            print("who: ", profile["username"])
+            print(request)
+            print("")
+            requests_received += 1
 
-                        self.ROOMS[roomid] = {
-                            "roomname": roomname,
-                            "userids": [profile["userid"]],
-                            "messages": [],
+            if request["verb"] == "post":
+                if request["type"] == "room":
+                    # create a room
+                    roomid = str(uuid.uuid4())
+                    roomname = request["content"]["roomname"]
+
+                    self.ROOMS[roomid] = {
+                        "roomname": roomname,
+                        "userids": [profile["userid"]],
+                        "messages": [],
+                        "roomid": roomid,
+                    }
+
+                    # emit event to user so they can update ui
+                    response = {
+                        "type": "room",
+                        "verb": "post",
+                        "content": {"roomname": roomname, "roomid": roomid},
+                    }
+                    # await websocket.send(json.dumps(response))
+                    await sendEncrypted(profile, response)
+
+                elif request["type"] == "message":
+                    # add message to room for new users who join
+                    now = datetime.now()
+                    now = now.strftime("%d/%m/%Y %H:%M:%S")
+                    roomid = request["content"]["roomid"]
+                    message = request["content"]["message"]
+                    header = f'{profile["username"]} @ {now}'
+                    self.ROOMS[roomid]["messages"].append(
+                        {"header": header, "message": message}
+                    )
+
+                    # now broadcast single message to everyone in the room (including user sending the message)
+                    response = {
+                        "type": "message",
+                        "verb": "get",
+                        "content": {
                             "roomid": roomid,
-                        }
+                            "header": header,
+                            "message": message,
+                        },
+                    }
 
-                        # emit event to user so they can update ui
-                        response = {
-                            "type": "room",
-                            "verb": "post",
-                            "content": {"roomname": roomname, "roomid": roomid},
-                        }
-                        # await websocket.send(json.dumps(response))
-                        await send(websocket, response)
+                    profiles = []
+                    for userid in self.ROOMS[roomid]["userids"]:
+                        profiles.append(self.PROFILES[userid])
 
-                    elif request["type"] == "message":
-                        # add message to room for new users who join
-                        now = datetime.now()
-                        now = now.strftime("%d/%m/%Y %H:%M:%S")
-                        roomid = request["content"]["roomid"]
-                        message = request["content"]["message"]
-                        header = f'{profile["username"]} @ {now}'
-                        self.ROOMS[roomid]["messages"].append(
-                            {"header": header, "message": message}
+                    await broadcastEncrypted(profiles, response)
+
+                    # for userid in ROOMS[roomid]["userids"]:
+                    #     socket = PROFILES[userid]["socket"]
+                    #     await socket.send(json.dumps(response))
+
+            elif request["verb"] == "get":
+                if request["type"] == "room":
+                    roomid = request["content"]["roomid"]
+                    roomname = self.ROOMS[roomid]["roomname"]
+                    profiles = list(
+                        map(
+                            lambda userid: self.PROFILES[userid]["username"],
+                            self.ROOMS[roomid]["userids"],
                         )
+                    )
+                    response = {
+                        "type": "room",
+                        "verb": "get",
+                        "content": {
+                            "roomid": roomid,
+                            "roomname": roomname,
+                            "profiles": profiles,
+                            "messages": self.ROOMS[roomid]["messages"],
+                        },
+                    }
 
-                        # now broadcast single message to everyone in the room (including user sending the message)
-                        response = {
-                            "type": "message",
-                            "verb": "get",
-                            "content": {
-                                "roomid": roomid,
-                                "header": header,
-                                "message": message,
-                            },
-                        }
+                    # await websocket.send(json.dumps(response))
+                    await sendEncrypted(profile, response)
 
-                        sockets = []
-                        for userid in self.ROOMS[roomid]["userids"]:
-                            sockets.append(self.PROFILES[userid]["socket"])
+            elif request["verb"] == "put":
+                if request["type"] == "room":
+                    roomid = request["content"]["roomid"]
 
-                        await broadcast(sockets, response)
+                    # add user to room
+                    self.ROOMS[roomid]["userids"].append(profile["userid"])
 
-                        # for userid in ROOMS[roomid]["userids"]:
-                        #     socket = PROFILES[userid]["socket"]
-                        #     await socket.send(json.dumps(response))
+                    response = {
+                        "type": "room",
+                        "verb": "put",
+                        "content": {
+                            "roomname": self.ROOMS[roomid]["roomname"],
+                            "roomid": roomid,
+                        },
+                    }
 
-                elif request["verb"] == "get":
-                    if request["type"] == "room":
-                        roomid = request["content"]["roomid"]
-                        roomname = self.ROOMS[roomid]["roomname"]
-                        profiles = list(
-                            map(
-                                lambda userid: self.PROFILES[userid]["username"],
-                                self.ROOMS[roomid]["userids"],
-                            )
-                        )
-                        response = {
-                            "type": "room",
-                            "verb": "get",
-                            "content": {
-                                "roomid": roomid,
-                                "roomname": roomname,
-                                "profiles": profiles,
-                                "messages": self.ROOMS[roomid]["messages"],
-                            },
-                        }
+                    # await websocket.send(json.dumps(response))
+                    await sendEncrypted(profile, response)
 
-                        # await websocket.send(json.dumps(response))
-                        await send(websocket, response)
+                    # now broadcast to all users in the room
+                    response = {
+                        "type": "room",
+                        "verb": "patch",
+                        "content": {"roomid": roomid, "username": profile["username"]},
+                    }
 
-                elif request["verb"] == "put":
-                    if request["type"] == "room":
-                        roomid = request["content"]["roomid"]
+                    profiles = []
+                    for userid in self.ROOMS[roomid]["userids"]:
+                        profiles.append(self.PROFILES[userid])
 
-                        # add user to room
-                        self.ROOMS[roomid]["userids"].append(profile["userid"])
+                    await broadcastEncrypted(profiles, response)
 
-                        response = {
-                            "type": "room",
-                            "verb": "put",
-                            "content": {
-                                "roomname": self.ROOMS[roomid]["roomname"],
-                                "roomid": roomid,
-                            },
-                        }
+        except Exception as e:
+            print("ERROR")
+            print(e)
 
-                        # await websocket.send(json.dumps(response))
-                        await send(websocket, response)
-
-                        # now broadcast to all users in the room
-                        response = {
-                            "type": "room",
-                            "verb": "patch",
-                            "content": {"roomid": roomid, "username": profile["username"]},
-                        }
-
-                        sockets = []
-                        for userid in self.ROOMS[roomid]["userids"]:
-                            sockets.append(self.PROFILES[userid]["socket"])
-
-                        await broadcast(sockets, response)
-
-            except Exception as e:
-                print("ERROR")
-                print(e)
 
 
 
@@ -281,14 +330,15 @@ responses_sent = 0
 responses_acked = 0
 
 
-async def broadcast(sockets, response):
+async def broadcast(profiles, response):
     global responses_sent
     print("===== BROADCAST RESPONSE =====")
     print(response)
     print("")
 
-    for socket in sockets:
+    for profile in profiles:
         # add response id to each response - creating a new one for each message sent to a profile
+        socket = profile["socket"]
         mid = str(uuid.uuid4())
         response["id"] = mid
         ACK_QUEUE[mid] = response
@@ -296,13 +346,40 @@ async def broadcast(sockets, response):
         await socket.send(json.dumps(response))
 
 
-async def send(socket, response):
+async def broadcastEncrypted(profiles, response):
+    global responses_sent
+    print("===== BROADCAST ENCRYPTED RESPONSE =====")
+    print(response)
+    print("")
+    print(profiles)
+
+    saved_content = response["content"]
+
+    for profile in profiles:
+        # add response id to each response - creating a new one for each message sent to a profile
+        socket = profile["socket"]
+        mid = str(uuid.uuid4())
+        response["id"] = mid
+        ACK_QUEUE[mid] = response
+        responses_sent += 1
+
+        # encrypt content
+        fernet = Fernet(profile["symmetric"])
+        content = json.dumps(saved_content)
+        content = fernet.encrypt(content.encode()).decode()
+        response["content"] = content
+
+        await socket.send(json.dumps(response))
+
+
+async def send(profile, response):
     global responses_sent
     print("===== SINGLE REPONSE =====")
     print(response)
     print("")
 
     # add response id to response
+    socket = profile["socket"]
     mid = str(uuid.uuid4())
     response["id"] = mid
     ACK_QUEUE[mid] = response
@@ -310,8 +387,31 @@ async def send(socket, response):
     await socket.send(json.dumps(response))
 
 
-async def sendAck(socket, request):
-    mid = request["id"]#Something is going on here when I try to enter a room for that function...
+async def sendEncrypted(profile, response):
+    global responses_sent
+    print("===== SINGLE REPONSE =====")
+    print(response)
+    print("")
+
+    # add response id to response
+    socket = profile["socket"]
+    mid = str(uuid.uuid4())
+    response["id"] = mid
+    ACK_QUEUE[mid] = response
+    responses_sent += 1
+
+    # encrypt content
+    fernet = Fernet(profile["symmetric"])
+    content = json.dumps(response["content"])
+    content = fernet.encrypt(content.encode()).decode()
+    response["content"] = content
+
+    await socket.send(json.dumps(response))
+
+
+async def sendAck(profile, request):
+    socket = profile["socket"]
+    mid = request["id"]
     response = {"type": "ACK", "verb": "post", "content": {"id": mid}}
 
     print("===== SEND ACK =====")
@@ -319,6 +419,25 @@ async def sendAck(socket, request):
     print("")
 
     await socket.send(json.dumps(response))
+
+
+async def sendAckEncrypted(profile, request):
+    socket = profile["socket"]
+    mid = request["id"]
+    response = {"type": "ACK", "verb": "post", "content": {"id": mid}}
+
+    print("===== SEND ACK ENCRYPTED =====")
+    print(response)
+    print("")
+
+    # encrypt content
+    fernet = Fernet(profile["symmetric"])
+    content = json.dumps(response["content"])
+    content = fernet.encrypt(content.encode()).decode()
+    response["content"] = content
+    await socket.send(json.dumps(response))
+
+
 
 
 # called when a connection is first established
@@ -338,27 +457,57 @@ async def handler(websocket):
     # We are assuming first event is the create profile event
     userid = str(uuid.uuid4())
     username = request["content"]["username"]
+    # public = RSA.import_key(request["content"]["public"])
 
+    # generate symmetric key for the profile
+    key = Fernet.generate_key()
+    print(key)
+
+    # create content value
+    # content = json.dumps(
+    #     {"username": username, "userid": userid, "symmetric": key.decode()}
+    # )
+    content = {"username": username, "userid": userid, "symmetric": key.decode()}
+
+    # encrypt content using client's public key
+    # print("FIRST")
+    # print(public)
+    # print("END FIRST")
+    # encryptor = PKCS1_OAEP.new(public)
+    # encrypted_msg = encryptor.encrypt(content.encode())
+    # content = base64.b64encode(encrypted_msg)
+    # content = content.decode("utf-8")
+    # private = RSA.import_key(request["content"]["private"])
+    # decryptor = PKCS1_OAEP.new(private)
+    # msg = decryptor.decrypt(encrypted_msg)
+    # print("SECOND")
+    # print(msg)
+    # print("END SECOND")
+
+    # create profile
     INFO.PROFILES[userid] = {
         "username": username,
         "socket": websocket,
         "rooms": [],
         "userid": userid,
+        "symmetric": key,
     }
     profile = INFO.PROFILES[userid]
 
+    # send to client
     response = {
         "type": "profile",
         "verb": "post",
-        "content": {"username": username, "userid": userid},
+        "content": content,
     }
-
-    await send(websocket, response)
+    await send(profile, response)
 
     try:
-        await INFO.parse()
+        # listen for all incoming messages (which are encrypted using symmetric)
+        await INFO.parse(profile)
 
     finally:
+        # socket disconnect
         # for each room this user is a part of:
         for roomid in profile["rooms"]:
             # remove the user from that room
@@ -388,11 +537,11 @@ async def handler(websocket):
                 }
 
                 # broadcast the updated list of room profiles
-                sockets = []
+                profiles = []
                 for userid in INFO.ROOMS[roomid]["userids"]:
-                    sockets.append(INFO.PROFILES[userid]["socket"])
+                    profiles.append(PROFILES[userid])
 
-                await broadcast(sockets, response)
+                await broadcastEncrypted(profiles, response)
 
         # remove this user's PROFILE entry
         del INFO.PROFILES[userid]
@@ -418,13 +567,14 @@ def logger():
         time.sleep(5)
 
 
-
 INFO = INFORMATION()
 # listen for connections
 async def main():
     # for logging every 5 seconds
     thread = threading.Thread(target=logger)
-    thread.daemon = True # otherwise will run in background even after ctrl-c on main thread
+    thread.daemon = (
+        True  # otherwise will run in background even after ctrl-c on main thread
+    )
     thread.start()
 
     # handle incoming connections
