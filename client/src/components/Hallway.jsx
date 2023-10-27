@@ -24,6 +24,9 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
     const [createValue, setCreateValue] = useState(null);
     const [open, setOpen] = useState(false);
 
+    let enableDropAck = false;
+    let dropAck = true;
+
     function handler(websocketRef) {
         websocketRef.current.addEventListener("message", async ({ data }) => {
             const response = JSON.parse(data);
@@ -70,7 +73,8 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
             response["content"] = JSON.parse(content);
 
             // ACK server responses
-            if (response["type"] !== "ACK") {
+            if (response["type"] !== "ACK" && (!enableDropAck || (enableDropAck && !dropAck))) {
+
                 let symmetric = GlobalCryptoState.getSymmetric();
                 console.log(symmetric.length);
                 let secret = new fernet.Secret(symmetric);
@@ -91,6 +95,10 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
                 }
 
                 websocketRef.current.send(JSON.stringify(request));
+            }
+
+            if (response["type"] !== "ACK") {
+                dropAck = !dropAck;
             }
 
             if (response["verb"] === "post") {
