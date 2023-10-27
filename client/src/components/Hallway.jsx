@@ -3,6 +3,7 @@ import Stack from '@mui/material/Stack';
 import IconButton from '@mui/material/IconButton';
 import AddIcon from '@mui/icons-material/Add';
 import LogoutIcon from '@mui/icons-material/Logout';
+import BugReportIcon from '@mui/icons-material/BugReport';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Dialog from '@mui/material/Dialog';
@@ -289,6 +290,11 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
                 <Tooltip title="Exit">
                     <IconButton onClick={handleLogout}>
                         <LogoutIcon />
+                    </IconButton>
+                </Tooltip>
+                <Tooltip title="Test Page">
+                    <IconButton onClick={() => navigate('/test')}>
+                        <BugReportIcon />
                     </IconButton>
                 </Tooltip>
             </Stack>
