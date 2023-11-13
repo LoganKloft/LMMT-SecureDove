@@ -3,6 +3,7 @@ import Stack from '@mui/material/Stack';
 import IconButton from '@mui/material/IconButton';
 import AddIcon from '@mui/icons-material/Add';
 import LogoutIcon from '@mui/icons-material/Logout';
+import BugReportIcon from '@mui/icons-material/BugReport';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Dialog from '@mui/material/Dialog';
@@ -22,6 +23,9 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
     const [joinValue, setJoinValue] = useState(null);
     const [createValue, setCreateValue] = useState(null);
     const [open, setOpen] = useState(false);
+
+    let enableDropAck = false;
+    let dropAck = true;
 
     function handler(websocketRef) {
         websocketRef.current.addEventListener("message", async ({ data }) => {
@@ -69,7 +73,8 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
             response["content"] = JSON.parse(content);
 
             // ACK server responses
-            if (response["type"] !== "ACK") {
+            if (response["type"] !== "ACK" && (!enableDropAck || (enableDropAck && !dropAck))) {
+
                 let symmetric = GlobalCryptoState.getSymmetric();
                 console.log(symmetric.length);
                 let secret = new fernet.Secret(symmetric);
@@ -90,6 +95,10 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
                 }
 
                 websocketRef.current.send(JSON.stringify(request));
+            }
+
+            if (response["type"] !== "ACK") {
+                dropAck = !dropAck;
             }
 
             if (response["verb"] === "post") {
@@ -289,6 +298,11 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
                 <Tooltip title="Exit">
                     <IconButton onClick={handleLogout}>
                         <LogoutIcon />
+                    </IconButton>
+                </Tooltip>
+                <Tooltip title="Test Page">
+                    <IconButton onClick={() => navigate('/test')}>
+                        <BugReportIcon />
                     </IconButton>
                 </Tooltip>
             </Stack>

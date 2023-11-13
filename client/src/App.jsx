@@ -6,6 +6,7 @@ import { InitializeCryptoState } from './components/CryptoState';
 import './App.scss'
 import Login from './components/Login';
 import Home from './components/Home';
+import TestClient from './components/TestClient';
 
 function App() {
 
@@ -16,6 +17,7 @@ function App() {
       <Routes>
         <Route path='/' element={<Login websocketRef={websocketRef} />} />
         <Route path='home' element={<Home websocketRef={websocketRef} />} />
+        <Route path='test' element={<TestClient websocketRef={websocketRef} />} />
       </Routes>
       <SnackbarProvider
         maxStack={3}
