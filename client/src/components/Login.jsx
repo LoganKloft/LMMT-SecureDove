@@ -1,5 +1,4 @@
 import React, { useState } from 'react'
-import Input from '@mui/material/Input';
 import InputLabel from '@mui/material/InputLabel';
 import InputAdornment from '@mui/material/InputAdornment';
 import FormControl from '@mui/material/FormControl';
@@ -10,14 +9,20 @@ import { Snackbar } from './Snackbar';
 import { useNavigate } from 'react-router-dom';
 import { GlobalCryptoState } from './CryptoState';
 import './Login.scss'
+import { TextField } from '@mui/material';
 
 export default function Login({ websocketRef }) {
 
     const [username, setUsername] = useState("");
+    const [error, setError] = useState(false);
 
     const navigate = useNavigate();
 
     async function buttonClickHandler() {
+        if (!username) {
+            setError(true);
+            return null;
+        }
         // attempt to create a websocket
         websocketRef.current = new WebSocket("ws://localhost:8001/");
 
@@ -94,19 +99,24 @@ export default function Login({ websocketRef }) {
             <span></span>
             <Stack direction="column" spacing={2}>
                 <FormControl variant="standard">
-                    <InputLabel htmlFor="username">
-                        Username
-                    </InputLabel>
-                    <Input
+                    <InputLabel htmlFor="username" />
+                    <TextField
                         id="username"
-                        startAdornment={
-                            <InputAdornment position="start">
+                        required
+                        label = "Username"
+                        value = {username}
+                        error = {!!error}
+                        variant = "standard"
+                        InputProps={{ 
+                            startAdornment:  
+                            <InputAdornment position="start"> 
                                 <AccountCircle />
                             </InputAdornment>
-                        }
+                        }}
                         onChange={(event) => {
                             setUsername(event.target.value);
                         }}
+                        helperText = {error ? 'Username is required' : ''}
                     />
                 </FormControl>
                 <button className="submit" onClick={buttonClickHandler}>Login</button>
