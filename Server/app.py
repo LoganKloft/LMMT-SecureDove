@@ -439,6 +439,27 @@ async def parse(profile):
             print(e)
 
 
+async def isValidUsername(username):
+    # username must be a string
+    if not isinstance(username, str):
+        return False
+
+    # usernmae must be at least one character and no more than 32
+    if len(username) < 1 or len(username) > 32:
+        return False
+
+    # username may only contain characters and numbers
+    if not username.isalnum():
+        return False
+
+    # username must be unique
+    for key, value in PROFILES.items():
+        if value["username"] == username:
+            return False
+
+    return True
+
+
 # called when a connection is first established
 # we need to create a profile and then respond to future requests
 async def handler(websocket):
@@ -450,8 +471,17 @@ async def handler(websocket):
     connections += 1
 
     # wait for the first request
-    event = await websocket.recv()
-    request = json.loads(event)
+    request = None
+    while True:
+        event = await websocket.recv()
+        request = json.loads(event)
+
+        valid = await isValidUsername(request["content"]["username"])
+        if valid:
+            break
+
+        response = {"type": "profile", "verb": "post", "content": {"status": False}}
+        await websocket.send(json.dumps(response))
 
     # We are assuming first event is the create profile event
     userid = str(uuid.uuid4())
@@ -466,7 +496,12 @@ async def handler(websocket):
     # content = json.dumps(
     #     {"username": username, "userid": userid, "symmetric": key.decode()}
     # )
-    content = {"username": username, "userid": userid, "symmetric": key.decode()}
+    content = {
+        "username": username,
+        "userid": userid,
+        "symmetric": key.decode(),
+        "status": True,
+    }
 
     # encrypt content using client's public key
     # print("FIRST")

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import InputLabel from '@mui/material/InputLabel';
 import InputAdornment from '@mui/material/InputAdornment';
 import FormControl from '@mui/material/FormControl';
@@ -18,15 +18,9 @@ export default function Login({ websocketRef }) {
 
     const navigate = useNavigate();
 
-    async function buttonClickHandler() {
-        if (!username) {
-            setError(true);
-            return null;
-        }
-        // attempt to create a websocket
+    useEffect(() => {
         websocketRef.current = new WebSocket("ws://localhost:8001/");
 
-        // send create profile request when open
         websocketRef.current.addEventListener("open", async () => {
 
             Snackbar.success("Websocket connection opened!");
@@ -43,36 +37,60 @@ export default function Login({ websocketRef }) {
             );
 
             GlobalCryptoState.setKeyPair(keyPair);
+        })
 
-            const exported = await window.crypto.subtle.exportKey("spki", keyPair.publicKey);
-            const exportedAsString = String.fromCharCode.apply(null, new Uint8Array(exported));
-            const exportedAsBase64 = window.btoa(exportedAsString);
-            const pemExported = `-----BEGIN PUBLIC KEY-----\n${exportedAsBase64}\n-----END PUBLIC KEY-----`;
+        websocketRef.current.addEventListener("message", async ({ data }) => {
+            const response = JSON.parse(data);
 
-            const exportedPr = await window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
-            const exportedAsStringPr = String.fromCharCode.apply(null, new Uint8Array(exportedPr));
-            const exportedAsBase64Pr = window.btoa(exportedAsStringPr);
-            const pemExportedPr = `-----BEGIN PRIVATE KEY-----\n${exportedAsBase64Pr}\n-----END PRIVATE KEY-----`;
+            if (response["type"] === "profile") {
+                if (response["verb"] === "post") {
+                    if (response["content"]["status"] === true) {
+                        GlobalCryptoState.setSymmetric(response["content"]["symmetric"]);
+                        console.log(response);
 
-            let request = {
-                "type": "profile",
-                "verb": "post",
-                "id": uuidv4(),
-                "content": {
-                    "username": username,
-                    "public": pemExported
+                        // go to home
+                        navigate('/home');
+                    }
+                    else {
+                        setError(true);
+                    }
                 }
-            };
-
-            websocketRef.current.send(JSON.stringify(request));
+            }
         })
 
         websocketRef.current.addEventListener("close", () => {
             Snackbar.error("WebSocket connection closed!")
         })
+    }, [])
 
-        // go to home
-        navigate('/home');
+    async function buttonClickHandler() {
+        if (!username) {
+            setError(true);
+            return null;
+        }
+
+
+        const exported = await window.crypto.subtle.exportKey("spki", GlobalCryptoState.getKeyPair().publicKey);
+        const exportedAsString = String.fromCharCode.apply(null, new Uint8Array(exported));
+        const exportedAsBase64 = window.btoa(exportedAsString);
+        const pemExported = `-----BEGIN PUBLIC KEY-----\n${exportedAsBase64}\n-----END PUBLIC KEY-----`;
+
+        const exportedPr = await window.crypto.subtle.exportKey("pkcs8", GlobalCryptoState.getKeyPair().privateKey);
+        const exportedAsStringPr = String.fromCharCode.apply(null, new Uint8Array(exportedPr));
+        const exportedAsBase64Pr = window.btoa(exportedAsStringPr);
+        const pemExportedPr = `-----BEGIN PRIVATE KEY-----\n${exportedAsBase64Pr}\n-----END PRIVATE KEY-----`;
+
+        let request = {
+            "type": "profile",
+            "verb": "post",
+            "id": uuidv4(),
+            "content": {
+                "username": username,
+                "public": pemExported
+            }
+        };
+
+        websocketRef.current.send(JSON.stringify(request));
     }
 
     return (
@@ -103,20 +121,20 @@ export default function Login({ websocketRef }) {
                     <TextField
                         id="username"
                         required
-                        label = "Username"
-                        value = {username}
-                        error = {!!error}
-                        variant = "standard"
-                        InputProps={{ 
-                            startAdornment:  
-                            <InputAdornment position="start"> 
-                                <AccountCircle />
-                            </InputAdornment>
+                        label="Username"
+                        value={username}
+                        error={!!error}
+                        variant="standard"
+                        InputProps={{
+                            startAdornment:
+                                <InputAdornment position="start">
+                                    <AccountCircle />
+                                </InputAdornment>
                         }}
                         onChange={(event) => {
                             setUsername(event.target.value);
                         }}
-                        helperText = {error ? 'Username is required' : ''}
+                        helperText={error ? 'Username is required' : ''}
                     />
                 </FormControl>
                 <button className="submit" onClick={buttonClickHandler}>Login</button>

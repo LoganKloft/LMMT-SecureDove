@@ -55,9 +55,9 @@ export default function Hallway({ setUsers, setMessages, websocketRef, setCurren
                     // } catch (e) {
                     //     console.log(e);
                     // }
-                    GlobalCryptoState.setSymmetric(response["content"]["symmetric"]);
-                    console.log(response);
-                    return;
+                    // GlobalCryptoState.setSymmetric(response["content"]["symmetric"]);
+                    // console.log(response);
+                    // return;
                 }
             }
 
