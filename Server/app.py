@@ -15,8 +15,9 @@ import websockets
 
 # import rsa
 from cryptography.fernet import Fernet  # symmetric encryption
-from Crypto.Cipher import PKCS1_OAEP
+from Crypto.Cipher import PKCS1_OAEP, PKCS1_v1_5
 from Crypto.PublicKey import RSA
+from Crypto.Random import get_random_bytes
 
 # when a client wants to create a profile, it will establish a symmetric key with the server
 # communication between client and server will use this symmetric key for all messages
@@ -475,6 +476,9 @@ async def handler(websocket):
     while True:
         event = await websocket.recv()
         request = json.loads(event)
+        print("========= Login Request =========")
+        print(request)
+        print("========= End Login Request =========\n")
 
         valid = await isValidUsername(request["content"]["username"])
         if valid:
@@ -490,7 +494,22 @@ async def handler(websocket):
 
     # generate symmetric key for the profile
     key = Fernet.generate_key()
-    print(key)
+    symmetric = key.decode()
+    pub_key = RSA.importKey(request["content"]["public"])
+    # cipher = PKCS1_OAEP.new(pub_key)
+    cipher = PKCS1_v1_5.new(pub_key)
+    ciphertext = cipher.encrypt(bytes(symmetric, "utf-8"))
+    print(base64.b64encode(ciphertext))
+
+    pri_key = RSA.importKey(request["content"]["private"])
+    # pri_cipher = PKCS1_OAEP.new(pri_key)
+    pri_cipher = PKCS1_v1_5.new(pri_key)
+    sentinel = get_random_bytes(16)
+    plaintext = pri_cipher.decrypt(ciphertext, sentinel)
+    print(plaintext)
+
+    encrypted_symmetric = base64.b64encode(ciphertext).decode("ascii")
+    print(pri_cipher.decrypt(base64.b64decode(encrypted_symmetric), sentinel))
 
     # create content value
     # content = json.dumps(
@@ -499,7 +518,8 @@ async def handler(websocket):
     content = {
         "username": username,
         "userid": userid,
-        "symmetric": key.decode(),
+        "symmetric": symmetric,
+        "encrypted_symmetric": base64.b64encode(ciphertext).decode("ascii"),
         "status": True,
     }
 
