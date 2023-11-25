@@ -217,7 +217,7 @@ async def broadcastEncrypted(profiles, response):
         response[
             "ack_timestamp"
         ] = time.time()  # so we can track when to resend - every five seconds
-        response["useEncryptedSend"] = True
+        response["useEncryptedSend"] = False
         ACK_QUEUE[mid] = response
         responses_sent += 1
 
@@ -264,7 +264,7 @@ async def sendEncrypted(profile, response):
     response[
         "ack_timestamp"
     ] = time.time()  # so we can track when to resend - every five seconds
-    response["useEncryptedSend"] = True
+    response["useEncryptedSend"] = False
     ACK_QUEUE[mid] = response
     responses_sent += 1
 
@@ -648,30 +648,40 @@ def logger():
 # every 5 seconds will iterate through all items in the ACK queue
 # if that item is is type="message" and it's been 5 seconds since sending,
 # we will rebroadcast it
-def rebroadcaster():
+async def rebroadcaster():
     # for all entries with type="message"
     # check that user still exists
     # if not delete entry
     # check that current timestamp and saved timestamp differ by 5 or more seconds
     # then delete the entry
     # then send the message again using send or sendEncrypted
-    for mid, response in ACK_QUEUE.items():
-        if response["type"] == "message" and response["verb"] == "post":
-            userid = response["userid"]
-            if userid in PROFILES:
-                cur_timestamp = time.time()
-                ack_timestamp = response["ack_timestamp"]
+    while True:
+        print("==== REBROADCASTER ====")
+        items = list(
+            ACK_QUEUE.items()
+        )  # must save a copy otherwise dictionary can change since different threads access it
+        for mid, response in items:
+            if response["type"] == "message" and response["verb"] == "get":
+                userid = response["userid"]
+                if userid in PROFILES:
+                    cur_timestamp = time.time()
+                    ack_timestamp = response["ack_timestamp"]
 
-                if cur_timestamp - ack_timestamp >= 5:
+                    if cur_timestamp - ack_timestamp >= 5:
+                        del ACK_QUEUE[mid]
+
+                        if response["useEncryptedSend"] == True:
+                            await sendEncrypted(PROFILES[userid], response)
+                        else:
+                            await send(PROFILES[userid], response)
+                else:
                     del ACK_QUEUE[mid]
+        print("==== REBROADCASTER SLEEP ====")
+        time.sleep(5)
 
-                    if response["useEncryptedSend"] == True:
-                        sendEncrypted(PROFILES[userid], response)
-                    else:
-                        send(PROFILES[userid], response)
-            else:
-                del ACK_QUEUE[mid]
-    time.sleep(5)
+
+def rebroadcast_entry():
+    asyncio.run(rebroadcaster())
 
 
 # listen for connections
@@ -684,7 +694,7 @@ async def main():
     logger_thread.start()
 
     # for rebroadcasting messages that heven't been ACKed
-    rebroadcaster_thread = threading.Thread(target=rebroadcaster)
+    rebroadcaster_thread = threading.Thread(target=rebroadcast_entry)
     rebroadcaster_thread.daemon = True
     rebroadcaster_thread.start()
 
