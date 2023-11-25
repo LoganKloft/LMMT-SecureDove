@@ -8,6 +8,7 @@ import uuid
 import threading
 import time
 import base64
+import copy
 from datetime import datetime
 
 # installed
@@ -204,30 +205,31 @@ async def broadcastEncrypted(profiles, response):
     print("")
     print(profiles)
 
-    saved_content = response["content"]
-
     for profile in profiles:
+        response_copy = copy.copy(response)
+        content_copy = copy.copy(response["content"])
+
         # add response id to each response - creating a new one for each message sent to a profile
         socket = profile["socket"]
         mid = str(uuid.uuid4())
-        response["id"] = mid  # unique id for ACK
-        response["userid"] = profile[
+        response_copy["id"] = mid  # unique id for ACK
+        response_copy["userid"] = profile[
             "userid"
         ]  # so we know who to resend the message to
-        response[
+        response_copy[
             "ack_timestamp"
         ] = time.time()  # so we can track when to resend - every five seconds
-        response["useEncryptedSend"] = False
-        ACK_QUEUE[mid] = response
+        response_copy["useEncryptedSend"] = False
+        ACK_QUEUE[mid] = response_copy
         responses_sent += 1
 
         # encrypt content
         fernet = Fernet(profile["symmetric"])
-        content = json.dumps(saved_content)
+        content = json.dumps(content_copy)
         content = fernet.encrypt(content.encode()).decode()
-        response["content"] = content
+        response_copy["content"] = content
 
-        await socket.send(json.dumps(response))
+        await socket.send(json.dumps(response_copy))
 
 
 async def send(profile, response):
