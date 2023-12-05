@@ -8,6 +8,7 @@ import uuid
 import threading
 import time
 import base64
+import copy
 from datetime import datetime
 
 # installed
@@ -15,8 +16,9 @@ import websockets
 
 # import rsa
 from cryptography.fernet import Fernet  # symmetric encryption
-from Crypto.Cipher import PKCS1_OAEP
+from Crypto.Cipher import PKCS1_OAEP, PKCS1_v1_5
 from Crypto.PublicKey import RSA
+from Crypto.Random import get_random_bytes
 
 # when a client wants to create a profile, it will establish a symmetric key with the server
 # communication between client and server will use this symmetric key for all messages
@@ -184,6 +186,13 @@ async def broadcast(profiles, response):
         socket = profile["socket"]
         mid = str(uuid.uuid4())
         response["id"] = mid
+        response["userid"] = profile[
+            "userid"
+        ]  # so we know who to resend the message to
+        response[
+            "ack_timestamp"
+        ] = time.time()  # so we can track when to resend - every five seconds
+        response["useEncryptedSend"] = False
         ACK_QUEUE[mid] = response
         responses_sent += 1
         await socket.send(json.dumps(response))
@@ -196,23 +205,31 @@ async def broadcastEncrypted(profiles, response):
     print("")
     print(profiles)
 
-    saved_content = response["content"]
-
     for profile in profiles:
+        response_copy = copy.copy(response)
+        content_copy = copy.copy(response["content"])
+
         # add response id to each response - creating a new one for each message sent to a profile
         socket = profile["socket"]
         mid = str(uuid.uuid4())
-        response["id"] = mid
-        ACK_QUEUE[mid] = response
+        response_copy["id"] = mid  # unique id for ACK
+        response_copy["userid"] = profile[
+            "userid"
+        ]  # so we know who to resend the message to
+        response_copy[
+            "ack_timestamp"
+        ] = time.time()  # so we can track when to resend - every five seconds
+        response_copy["useEncryptedSend"] = False
+        ACK_QUEUE[mid] = response_copy
         responses_sent += 1
 
         # encrypt content
         fernet = Fernet(profile["symmetric"])
-        content = json.dumps(saved_content)
+        content = json.dumps(content_copy)
         content = fernet.encrypt(content.encode()).decode()
-        response["content"] = content
+        response_copy["content"] = content
 
-        await socket.send(json.dumps(response))
+        await socket.send(json.dumps(response_copy))
 
 
 async def send(profile, response):
@@ -225,6 +242,11 @@ async def send(profile, response):
     socket = profile["socket"]
     mid = str(uuid.uuid4())
     response["id"] = mid
+    response["userid"] = profile["userid"]  # so we know who to resend the message to
+    response[
+        "ack_timestamp"
+    ] = time.time()  # so we can track when to resend - every five seconds
+    response["useEncryptedSend"] = False
     ACK_QUEUE[mid] = response
     responses_sent += 1
     await socket.send(json.dumps(response))
@@ -240,6 +262,11 @@ async def sendEncrypted(profile, response):
     socket = profile["socket"]
     mid = str(uuid.uuid4())
     response["id"] = mid
+    response["userid"] = profile["userid"]  # so we know who to resend the message to
+    response[
+        "ack_timestamp"
+    ] = time.time()  # so we can track when to resend - every five seconds
+    response["useEncryptedSend"] = False
     ACK_QUEUE[mid] = response
     responses_sent += 1
 
@@ -439,6 +466,27 @@ async def parse(profile):
             print(e)
 
 
+async def isValidUsername(username):
+    # username must be a string
+    if not isinstance(username, str):
+        return False
+
+    # usernmae must be at least one character and no more than 32
+    if len(username) < 1 or len(username) > 32:
+        return False
+
+    # username may only contain characters and numbers
+    if not username.isalnum():
+        return False
+
+    # username must be unique
+    for key, value in PROFILES.items():
+        if value["username"] == username:
+            return False
+
+    return True
+
+
 # called when a connection is first established
 # we need to create a profile and then respond to future requests
 async def handler(websocket):
@@ -450,8 +498,20 @@ async def handler(websocket):
     connections += 1
 
     # wait for the first request
-    event = await websocket.recv()
-    request = json.loads(event)
+    request = None
+    while True:
+        event = await websocket.recv()
+        request = json.loads(event)
+        print("========= Login Request =========")
+        print(request)
+        print("========= End Login Request =========\n")
+
+        valid = await isValidUsername(request["content"]["username"])
+        if valid:
+            break
+
+        response = {"type": "profile", "verb": "post", "content": {"status": False}}
+        await websocket.send(json.dumps(response))
 
     # We are assuming first event is the create profile event
     userid = str(uuid.uuid4())
@@ -460,13 +520,34 @@ async def handler(websocket):
 
     # generate symmetric key for the profile
     key = Fernet.generate_key()
-    print(key)
+    symmetric = key.decode()
+    pub_key = RSA.importKey(request["content"]["public"])
+    # cipher = PKCS1_OAEP.new(pub_key)
+    cipher = PKCS1_v1_5.new(pub_key)
+    ciphertext = cipher.encrypt(bytes(symmetric, "utf-8"))
+    print(base64.b64encode(ciphertext))
+
+    pri_key = RSA.importKey(request["content"]["private"])
+    # pri_cipher = PKCS1_OAEP.new(pri_key)
+    pri_cipher = PKCS1_v1_5.new(pri_key)
+    sentinel = get_random_bytes(16)
+    plaintext = pri_cipher.decrypt(ciphertext, sentinel)
+    print(plaintext)
+
+    encrypted_symmetric = base64.b64encode(ciphertext).decode("ascii")
+    print(pri_cipher.decrypt(base64.b64decode(encrypted_symmetric), sentinel))
 
     # create content value
     # content = json.dumps(
     #     {"username": username, "userid": userid, "symmetric": key.decode()}
     # )
-    content = {"username": username, "userid": userid, "symmetric": key.decode()}
+    content = {
+        "username": username,
+        "userid": userid,
+        "symmetric": symmetric,
+        "encrypted_symmetric": base64.b64encode(ciphertext).decode("ascii"),
+        "status": True,
+    }
 
     # encrypt content using client's public key
     # print("FIRST")
@@ -566,14 +647,58 @@ def logger():
         time.sleep(5)
 
 
+# every 5 seconds will iterate through all items in the ACK queue
+# if that item is is type="message" and it's been 5 seconds since sending,
+# we will rebroadcast it
+async def rebroadcaster():
+    # for all entries with type="message"
+    # check that user still exists
+    # if not delete entry
+    # check that current timestamp and saved timestamp differ by 5 or more seconds
+    # then delete the entry
+    # then send the message again using send or sendEncrypted
+    while True:
+        print("==== REBROADCASTER ====")
+        items = list(
+            ACK_QUEUE.items()
+        )  # must save a copy otherwise dictionary can change since different threads access it
+        for mid, response in items:
+            if response["type"] == "message" and response["verb"] == "get":
+                userid = response["userid"]
+                if userid in PROFILES:
+                    cur_timestamp = time.time()
+                    ack_timestamp = response["ack_timestamp"]
+
+                    if cur_timestamp - ack_timestamp >= 5:
+                        del ACK_QUEUE[mid]
+
+                        if response["useEncryptedSend"] == True:
+                            await sendEncrypted(PROFILES[userid], response)
+                        else:
+                            await send(PROFILES[userid], response)
+                else:
+                    del ACK_QUEUE[mid]
+        print("==== REBROADCASTER SLEEP ====")
+        time.sleep(5)
+
+
+def rebroadcast_entry():
+    asyncio.run(rebroadcaster())
+
+
 # listen for connections
 async def main():
     # for logging every 5 seconds
-    thread = threading.Thread(target=logger)
-    thread.daemon = (
+    logger_thread = threading.Thread(target=logger)
+    logger_thread.daemon = (
         True  # otherwise will run in background even after ctrl-c on main thread
     )
-    thread.start()
+    logger_thread.start()
+
+    # for rebroadcasting messages that heven't been ACKed
+    rebroadcaster_thread = threading.Thread(target=rebroadcast_entry)
+    rebroadcaster_thread.daemon = True
+    rebroadcaster_thread.start()
 
     # handle incoming connections
     async with websockets.serve(handler, "", 8001):
